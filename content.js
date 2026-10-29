@@ -2149,6 +2149,7 @@
     let animFrameId = null;
     let recToast = null;
     let isRecording = false;
+    let recordCanvas = null;
 
     const originalScrollX = window.scrollX || 0;
     const originalScrollY = window.scrollY || 0;
@@ -2284,9 +2285,20 @@
       if (recW % 2 !== 0) recW += 1;
       if (recH % 2 !== 0) recH += 1;
 
-      const recordCanvas = document.createElement('canvas');
+      recordCanvas = document.createElement('canvas');
       recordCanvas.width = recW;
       recordCanvas.height = recH;
+      // Attach to document tree offscreen so Firefox/Gecko active paint loop ticks frames into captureStream
+      recordCanvas.style.position = 'fixed';
+      recordCanvas.style.left = '-9999px';
+      recordCanvas.style.top = '-9999px';
+      recordCanvas.style.width = '2px';
+      recordCanvas.style.height = '2px';
+      recordCanvas.style.opacity = '0.01';
+      recordCanvas.style.pointerEvents = 'none';
+      recordCanvas.style.zIndex = '-99999';
+      document.body.appendChild(recordCanvas);
+
       const recCtx = recordCanvas.getContext('2d');
       recCtx.imageSmoothingEnabled = true;
       recCtx.imageSmoothingQuality = 'high';
@@ -2321,12 +2333,13 @@
 
       // 10. Setup MediaRecorder with Audio support
       const canvasStream = recordCanvas.captureStream(30);
+      const videoTrack = canvasStream.getVideoTracks()[0];
       let recordStream = canvasStream;
       let hasAudio = false;
 
       // Only attempt to attach audio for real videos with sound (never for GIFs, short loops, or muted posts)
-      const isGifLike = !vDur || vDur < 2.5 || videoEl.loop;
-      if (!isGifLike && !origMuted) {
+      const isGifLike = !vDur || vDur < 3.5 || videoEl.loop || videoEl.muted || origMuted;
+      if (!isGifLike) {
         try {
           const vStream = typeof videoEl.captureStream === 'function'
             ? videoEl.captureStream()
@@ -2373,7 +2386,6 @@
         videoBitsPerSecond: 8000000
       };
 
-      // Force keyframe every 1000ms (1 sec) to eliminate seeking artifacts / macroblock distortion
       try {
         recOptions.videoKeyFrameIntervalDuration = 1000;
       } catch (e) {}
@@ -2382,12 +2394,24 @@
       try {
         recorder = new MediaRecorder(recordStream, recOptions);
       } catch (e) {
-        delete recOptions.videoKeyFrameIntervalDuration;
-        recorder = new MediaRecorder(recordStream, recOptions);
+        try {
+          delete recOptions.videoKeyFrameIntervalDuration;
+          recorder = new MediaRecorder(recordStream, recOptions);
+        } catch (e2) {
+          try {
+            recorder = new MediaRecorder(recordStream, { mimeType });
+          } catch (e3) {
+            recorder = new MediaRecorder(recordStream);
+          }
+        }
       }
 
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+        try {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        } catch (err) {
+          console.warn('[Screenshoter] ondataavailable push error:', err);
+        }
       };
 
       // 11. Start recording & show progress toast with Stop button
@@ -2395,6 +2419,8 @@
       isRecording = true;
       let isStopping = false;
       let onStopResolve = null;
+      let stopFlushTimer = null;
+      let maxDurationTimer = null;
 
       const stopRecording = () => {
         if (!isRecording) {
@@ -2413,8 +2439,15 @@
           });
         }
 
+        // When stopRecording is triggered, give MediaRecorder up to 6 seconds to flush buffers and trigger onstop
+        stopFlushTimer = setTimeout(() => {
+          console.warn('[Screenshoter] MediaRecorder onstop timed out after stop(), forcing completion');
+          if (onStopResolve) onStopResolve();
+        }, 6000);
+
         try {
           if (recorder && recorder.state === 'recording') {
+            try { recorder.requestData(); } catch (e) {}
             recorder.stop();
           } else if (onStopResolve) {
             onStopResolve();
@@ -2462,6 +2495,11 @@
 
         recCtx.restore();
 
+        // Push frame update to canvas stream track (essential for Firefox/Gecko compositor)
+        if (videoTrack && typeof videoTrack.requestFrame === 'function') {
+          try { videoTrack.requestFrame(); } catch (e) {}
+        }
+
         // While stopping, keep drawing frames so canvas.captureStream flushes encoder in Firefox
         if (isStopping) {
           animFrameId = requestAnimationFrame(drawFrame);
@@ -2493,7 +2531,7 @@
         animFrameId = requestAnimationFrame(drawFrame);
       }
 
-      recorder.start(100);
+      recorder.start();
       animFrameId = requestAnimationFrame(drawFrame);
 
       // 13. Wait for recording to complete (clean native MediaRecorder WebM blob)
@@ -2503,8 +2541,25 @@
           if (finished) return;
           finished = true;
           isStopping = false;
+          if (stopFlushTimer) clearTimeout(stopFlushTimer);
+          if (maxDurationTimer) clearTimeout(maxDurationTimer);
           if (animFrameId) cancelAnimationFrame(animFrameId);
           onStopResolve = null;
+
+          // Stop all stream tracks cleanly so browser releases encoders and audio sinks
+          try {
+            recordStream.getTracks().forEach(tr => tr.stop());
+          } catch (e) {}
+          try {
+            canvasStream.getTracks().forEach(tr => tr.stop());
+          } catch (e) {}
+
+          // Remove recordCanvas from DOM
+          if (recordCanvas && recordCanvas.parentNode) {
+            try { recordCanvas.parentNode.removeChild(recordCanvas); } catch (e) {}
+            recordCanvas = null;
+          }
+
           resolve(new Blob(chunks, { type: mimeType || 'video/webm' }));
         };
 
@@ -2515,8 +2570,11 @@
           finish();
         };
 
-        // Safety timeout so recording never hangs forever even if browser encoder stalls
-        setTimeout(finish, 3000);
+        // Safety timeout: targetDuration + 10s (minimum 10s), triggers clean stopRecording
+        maxDurationTimer = setTimeout(() => {
+          console.warn('[Screenshoter] Max recording duration reached');
+          stopRecording();
+        }, Math.max(10000, Math.round((targetDuration + 10) * 1000)));
       });
 
       if (recToast) recToast.close();
@@ -2525,6 +2583,10 @@
         try { videoEl.pause(); } catch (e) {}
       }
       videoEl.muted = origMuted;
+
+      if (!blob || blob.size < 1000) {
+        throw new Error('Video recording failed: empty stream (size ' + (blob?.size || 0) + ' bytes)');
+      }
 
       // 13.5. Fix WebM duration metadata client-side so standalone WebM has a valid timeline and seeking
       let finalWebmBlob = blob;
@@ -2679,6 +2741,10 @@
       if (restoreElements) {
         try { restoreElements(); } catch (e) {}
         restoreElements = null;
+      }
+      if (recordCanvas && recordCanvas.parentNode) {
+        try { recordCanvas.parentNode.removeChild(recordCanvas); } catch (e) {}
+        recordCanvas = null;
       }
       window.scrollTo({ left: originalScrollX, top: originalScrollY, behavior: 'instant' });
     }
