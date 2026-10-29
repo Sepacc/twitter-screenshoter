@@ -45,10 +45,10 @@ HAS_FFMPEG = shutil.which("ffmpeg") is not None
 
 
 def check_dependencies():
-    print(f"[*] Pillow доступен: {'ДА (v' + Image.__version__ + ')' if HAS_PILLOW else 'НЕТ'}")
-    print(f"[*] FFmpeg доступен в PATH: {'ДА' if HAS_FFMPEG else 'НЕТ'}")
+    print(f"[*] Pillow status: {'Available (v' + Image.__version__ + ')' if HAS_PILLOW else 'NOT INSTALLED'}")
+    print(f"[*] FFmpeg status: {'Available in PATH' if HAS_FFMPEG else 'NOT FOUND'}")
     if not HAS_PILLOW and not HAS_FFMPEG:
-        print("[!] Внимание: Для работы скрипта требуется Pillow (pip install pillow) или FFmpeg.")
+        print("[!] Warning: Pillow (pip install pillow) or FFmpeg is required.")
 
 
 def decode_base64_image(data_url_or_base64):
@@ -248,10 +248,10 @@ class StitcherHTTPHandler(BaseHTTPRequestHandler):
                     "dataUrl": data_url
                 }
                 self.wfile.write(json.dumps(resp_payload).encode("utf-8"))
-                print(f"[+] Скриншот успешно склеен и сохранен: {out_filename}")
+                print(f"[+] Screenshot stitched and saved: {out_filename}")
 
             except Exception as e:
-                print(f"[-] Ошибка склейки: {e}", file=sys.stderr)
+                print(f"[-] Stitching error / Ошибка склейки: {e}", file=sys.stderr)
                 self._set_cors_headers(500)
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
 
@@ -312,7 +312,7 @@ class StitcherHTTPHandler(BaseHTTPRequestHandler):
                         with open(saved_filepath, "wb") as f:
                             f.write(mp4_bytes)
                     except Exception as fe:
-                        print(f"[-] Не удалось сохранить в {custom_folder}: {fe}")
+                        print(f"[-] Failed to save to {custom_folder}: {fe}")
 
                 # Clean up temporary files immediately so no duplicate files are left on disk
                 for p in (temp_webm, temp_mp4):
@@ -333,9 +333,9 @@ class StitcherHTTPHandler(BaseHTTPRequestHandler):
                     "dataUrl": f"data:video/mp4;base64,{b64_mp4}"
                 }
                 self.wfile.write(json.dumps(resp_payload).encode("utf-8"))
-                print(f"[+] Видео MP4 (H.264/AAC для TG) готово: {filename} ({len(mp4_bytes)/1024/1024:.2f} МБ)")
+                print(f"[+] MP4 video (H.264/AAC for TG) ready: {filename} ({len(mp4_bytes)/1024/1024:.2f} MB)")
             except Exception as e:
-                print(f"[-] Ошибка конвертации в MP4: {e}", file=sys.stderr)
+                print(f"[-] MP4 conversion error / Ошибка конвертации в MP4: {e}", file=sys.stderr)
                 self._set_cors_headers(500)
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
         else:
@@ -347,27 +347,27 @@ def run_server(port=5678):
     server_address = ("127.0.0.1", port)
     httpd = HTTPServer(server_address, StitcherHTTPHandler)
     print("=" * 60)
-    print(f" [X/Twitter Screenshoter] Сервер склейки и конвертации запущен:")
-    print(f" URL: http://127.0.0.1:{port}")
-    print(f" Эндпоинт проверки:    http://127.0.0.1:{port}/status")
-    print(f" Эндпоинт склейки:     http://127.0.0.1:{port}/stitch (POST)")
-    print(f" Эндпоинт MP4 для TG:  http://127.0.0.1:{port}/convert (POST)")
+    print(" [X/Twitter Screenshoter] Local Processing Server is running:")
+    print(f" URL:            http://127.0.0.1:{port}")
+    print(f" Status Check:   http://127.0.0.1:{port}/status")
+    print(f" Stitch (POST):  http://127.0.0.1:{port}/stitch")
+    print(f" Video (POST):   http://127.0.0.1:{port}/convert")
     print("=" * 60)
-    print("Нажмите Ctrl+C для остановки сервера.\n")
+    print("Press Ctrl+C to stop the server / Нажмите Ctrl+C для остановки.\n")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n[*] Сервер остановлен.")
+        print("\n[*] Server stopped / Сервер остановлен.")
         httpd.server_close()
 
 
 def run_cli(args):
-    """CLI режим склейки файлов из папки"""
+    """CLI mode for stitching slice images from a folder"""
     if not os.path.isdir(args.input_folder):
-        print(f"[-] Папка не найдена: {args.input_folder}", file=sys.stderr)
+        print(f"[-] Directory not found: {args.input_folder}", file=sys.stderr)
         sys.exit(1)
 
-    # Ищем файлы картинок
+    # Valid image extensions
     valid_exts = {".png", ".jpg", ".jpeg", ".webp"}
     files = sorted([
         os.path.join(args.input_folder, f)
@@ -376,10 +376,10 @@ def run_cli(args):
     ])
 
     if not files:
-        print(f"[-] В папке {args.input_folder} не найдено изображений.", file=sys.stderr)
+        print(f"[-] No valid images found in {args.input_folder}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[*] Найдено {len(files)} фрагментов для склейки.")
+    print(f"[*] Found {len(files)} slice images to stitch.")
 
     if args.method == "ffmpeg":
         stitch_images_ffmpeg(files, args.output)
@@ -396,16 +396,18 @@ def run_cli(args):
             y_offset += im.height
         canvas.save(args.output, "PNG")
 
-    print(f"[+] Успешно сохранено: {args.output}")
+    print(f"[+] Stitched successfully / Успешно сохранено: {args.output}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Склейка длинных скриншотов Twitter/X (Pillow / FFmpeg)")
-    parser.add_argument("--server", action="store_true", help="Запустить локальный HTTP-сервер для расширения")
-    parser.add_argument("--port", type=int, default=5678, help="Порт HTTP-сервера (по умолчанию 5678)")
-    parser.add_argument("--input-folder", type=str, help="Папка со слайсами для склейки (CLI режим)")
-    parser.add_argument("--output", type=str, default="full_stitched.png", help="Путь к итоговому файлу PNG")
-    parser.add_argument("--method", choices=["pillow", "ffmpeg"], default="pillow", help="Метод склейки (pillow или ffmpeg)")
+    parser = argparse.ArgumentParser(
+        description="High-Res Twitter/X Screenshot Stitcher & Video Converter (Pillow / FFmpeg)"
+    )
+    parser.add_argument("--server", action="store_true", help="Start local HTTP processing server for browser extension")
+    parser.add_argument("--port", type=int, default=5678, help="Server port (default: 5678)")
+    parser.add_argument("--input-folder", type=str, help="Folder containing slice images to stitch (CLI mode)")
+    parser.add_argument("--output", type=str, default="full_stitched.png", help="Path to output PNG image")
+    parser.add_argument("--method", choices=["pillow", "ffmpeg"], default="pillow", help="Stitching engine (pillow or ffmpeg)")
 
     args = parser.parse_args()
 

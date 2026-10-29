@@ -389,11 +389,15 @@
       quoteCard.style.setProperty('max-height', `${targetH}px`, 'important');
       quoteCard.style.setProperty('height', `${targetH}px`, 'important');
       quoteCard.style.setProperty('overflow', 'hidden', 'important');
+      void quoteCard.offsetHeight;
+      void tweetEl.offsetHeight;
     } else if (mode === '75') {
       const targetH = Math.max(80, Math.round(naturalH * 0.75));
       quoteCard.style.setProperty('max-height', `${targetH}px`, 'important');
       quoteCard.style.setProperty('height', `${targetH}px`, 'important');
       quoteCard.style.setProperty('overflow', 'hidden', 'important');
+      void quoteCard.offsetHeight;
+      void tweetEl.offsetHeight;
     }
 
     return () => {
@@ -1456,9 +1460,19 @@
       }
     }
 
-    const composers = document.querySelectorAll('[data-testid="inline-reply-composer"]');
+    const composers = document.querySelectorAll(
+      '[data-testid="inline-reply-composer"], [data-testid="tweetTextarea_0"], [aria-label*="Post text"], [aria-label*="Текст поста"]'
+    );
     for (const c of composers) {
-      hideEl(c);
+      const block = c.closest('div[style*="flex"], div[class*="r-"]') || c;
+      hideEl(block);
+    }
+    const allTextboxes = document.querySelectorAll('div[role="textbox"]');
+    for (const tb of allTextboxes) {
+      if (!tweetEl.contains(tb)) {
+        const composerWrapper = tb.closest('[data-testid*="composer"], div[class*="r-"]') || tb;
+        hideEl(composerWrapper);
+      }
     }
 
     // 5. Hide third-party extension badges (e.g. .xt-list-badge, .xt-profile-badge, [data-matched-key])
@@ -1668,6 +1682,7 @@
         }
       }
 
+      const quoteCard = findQuoteCard(tweetEl);
       const rect = tweetEl.getBoundingClientRect();
       const tweetDocTop = window.scrollY + rect.top;
 
@@ -1675,12 +1690,12 @@
 
       if (!config.hideActionBar) {
         const actionBars = Array.from(tweetEl.querySelectorAll('div[role="group"]')).filter(
-          ab => !ab.__tw_local_hidden && !ab.__tw_hidden && ab.offsetParent !== null
+          ab => !ab.__tw_local_hidden && !ab.__tw_hidden && ab.offsetParent !== null && (!quoteCard || !quoteCard.contains(ab))
         );
         if (actionBars.length > 0) {
           const lastAb = actionBars[actionBars.length - 1];
           const abRect = lastAb.getBoundingClientRect();
-          bottomY = Math.max(bottomY, abRect.bottom + 6);
+          bottomY = abRect.bottom + 8;
         }
       } else {
         // When hiding action bar, find the lowest visible content element in the tweet
@@ -1688,39 +1703,44 @@
         let contentBottom = rect.top;
 
         // Check quote card (quoted tweet / reply card)
-        const quoteCard = findQuoteCard(tweetEl);
         if (quoteCard && !quoteCard.__tw_local_hidden && !quoteCard.__tw_hidden && quoteCard.offsetParent !== null) {
           const qr = quoteCard.getBoundingClientRect();
           contentBottom = Math.max(contentBottom, qr.bottom + 8);
         }
 
         // Check all time elements (quote time and main tweet date/views row)
+        // Skip elements inside quoteCard because quoteCard's bounding rect already bounds it
         const times = tweetEl.querySelectorAll('time');
         for (const tm of times) {
           if (tm.__tw_local_hidden || tm.__tw_hidden || tm.offsetParent === null) continue;
+          if (quoteCard && quoteCard.contains(tm)) continue;
           const timeRow = tm.closest('div[style*="flex"], div[class*="r-"]') || tm;
           const tr = timeRow.getBoundingClientRect();
           contentBottom = Math.max(contentBottom, tr.bottom + 8);
         }
 
         // Check media (videos, images, photo cards, card wrappers)
+        // Skip elements inside quoteCard so overflowing unclipped media doesn't inflate height!
         const medias = tweetEl.querySelectorAll('video, img, [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"]');
         for (const m of medias) {
           if (m.__tw_local_hidden || m.__tw_hidden || m.offsetParent === null) continue;
+          if (quoteCard && quoteCard.contains(m)) continue;
           const mr = m.getBoundingClientRect();
           contentBottom = Math.max(contentBottom, mr.bottom + 8);
         }
 
         // Check text
+        // Skip elements inside quoteCard
         const texts = tweetEl.querySelectorAll('[data-testid="tweetText"]');
         for (const tx of texts) {
           if (tx.__tw_local_hidden || tx.__tw_hidden || tx.offsetParent === null) continue;
+          if (quoteCard && quoteCard.contains(tx)) continue;
           const txr = tx.getBoundingClientRect();
           contentBottom = Math.max(contentBottom, txr.bottom + 8);
         }
 
         if (contentBottom > rect.top + 30) {
-          bottomY = Math.max(rect.bottom, contentBottom);
+          bottomY = contentBottom;
         }
       }
 

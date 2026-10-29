@@ -1,6 +1,8 @@
 # X / Twitter Media & Thread Screenshoter
 
-A feature-rich Chromium browser extension for capturing pixel-perfect, high-resolution screenshots and video recordings of X (Twitter) posts, quote tweets, conversation threads, and media.
+![X/Twitter Post Screenshoter](screenshots/thumb.jpg)
+
+A feature-rich browser extension for Chromium (Chrome, Vivaldi, Brave, Edge) and Mozilla Firefox for capturing pixel-perfect, high-resolution screenshots and video recordings of X (Twitter) posts, quote tweets, conversation threads, and media.
 
 [English](#english) | [Русский](#русский)
 
@@ -11,7 +13,7 @@ A feature-rich Chromium browser extension for capturing pixel-perfect, high-reso
 
 ### Overview
 
-**X / Twitter Media & Thread Screenshoter** is designed for creators, archivists, journalists, and everyday users who need clean, high-resolution captures of tweets and conversation chains. It eliminates Twitter interface clutter (prompts, analytics, Grok, Follow buttons, dropdown menus) while preserving essential context such as verified badges, clean timestamps, view metrics, and media framing.
+**X / Twitter Media & Thread Screenshoter** is designed for creators, archivists, journalists, and everyday users who need clean, high-resolution captures of tweets and conversation chains. It eliminates Twitter interface clutter (prompts, analytics, Grok, Follow/Subscribe buttons, dropdown menus) while preserving essential context such as verified badges, clean timestamps, view metrics, and media framing.
 
 Additionally, it provides integrated video/GIF recording with automatic H.264/AAC MP4 encoding formatted for seamless playback and thumbnail generation on Telegram, Discord, and other messaging platforms.
 
@@ -95,15 +97,22 @@ Saved media files follow a predictable, clean naming format:
    ```bash
    git clone https://github.com/your-username/twitter-screenshoter.git
    ```
-2. Open your Chromium-based browser (Chrome, Vivaldi, Brave, Edge).
-3. Navigate to the extensions management page:
+
+#### Chromium-based Browsers (Chrome, Vivaldi, Brave, Edge)
+1. Open your browser and navigate to the extensions management page:
    - Chrome / Brave: `chrome://extensions`
    - Vivaldi: `vivaldi://extensions`
    - Edge: `edge://extensions`
-4. Enable **Developer mode** (toggle in the top-right corner).
-5. Click **Load unpacked** (or drag and drop the folder).
-6. Select the `SCREENSHOTER` folder.
-7. Open or refresh any post on [x.com](https://x.com).
+2. Enable **Developer mode** (toggle in the top-right corner).
+3. Click **Load unpacked** (or drag and drop the folder).
+4. Select the `SCREENSHOTER` folder.
+5. Open or refresh any post on [x.com](https://x.com).
+
+#### Mozilla Firefox (121+)
+1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox` in the address bar.
+2. Click **Load Temporary Add-on...**
+3. Select the `manifest.json` file inside the `SCREENSHOTER` folder.
+4. Open or refresh any post on [x.com](https://x.com).
 
 ---
 
@@ -168,6 +177,7 @@ SCREENSHOTER/
 ├── html2canvas.min.js    # Canvas rendering fallback library
 ├── feather/              # Bundled Feather SVG icon set
 ├── icons/                # Extension action icons (16, 48, 128)
+├── screenshots/          # Showcase preview banners and screenshots
 ├── LICENSE               # MIT License
 └── README.md             # Documentation (English and Russian)
 ```
@@ -198,9 +208,9 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 ### Обзор
 
-**X / Twitter Media & Thread Screenshoter** — это расширение для браузеров на базе Chromium (Chrome, Vivaldi, Brave, Edge), предназначенное для создания сверхчетких, аккуратных скриншотов постов, твитов с цитатами, длинных веток обсуждений и медиафайлов.
+**X / Twitter Media & Thread Screenshoter** — это расширение для браузеров на базе Chromium (Chrome, Vivaldi, Brave, Edge) и Mozilla Firefox, предназначенное для создания сверхчетких, аккуратных скриншотов постов, твитов с цитатами, длинных веток обсуждений и медиафайлов.
 
-Расширение автоматически очищает интерфейс поста от визуального шума (кнопки подписки, Grok, меню трех точек, аналитика и рекламные метки), сохраняя при этом все важные элементы: значки верификации, авторов, точную дату и время публикации, а также счетчики просмотров.
+Расширение автоматически очищает интерфейс поста от визуального шума (кнопки Follow/Subscribe, Grok, меню трех точек, аналитика и рекламные метки), сохраняя при этом все важные элементы: значки верификации, авторов, точную дату и время публикации, а также счетчики просмотров.
 
 Встроенная функция записи видео и GIF позволяет захватывать медиа вместе со звуком и субтитрами, автоматически конвертируя результат в формат MP4 (H.264/AAC), идеально подходящий для мгновенной отправки в Telegram и Discord.
 
@@ -284,14 +294,22 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
    ```bash
    git clone https://github.com/your-username/twitter-screenshoter.git
    ```
-2. Откройте страницу расширений в Chromium-браузере:
+
+#### Chromium-браузеры (Chrome, Vivaldi, Brave, Edge, Opera)
+1. Откройте страницу расширений в браузере:
    - Chrome / Brave: `chrome://extensions`
    - Vivaldi: `vivaldi://extensions`
    - Edge: `edge://extensions`
-3. Включите **«Режим разработчика»** (Developer mode) в правом верхнем углу.
-4. Нажмите **«Загрузить распакованное расширение»** (Load unpacked).
-5. Выберите папку `SCREENSHOTER`.
-6. Откройте или обновите страницу любого поста на [x.com](https://x.com).
+2. Включите **«Режим разработчика»** (Developer mode) в правом верхнем углу.
+3. Нажмите **«Загрузить распакованное расширение»** (Load unpacked).
+4. Выберите папку `SCREENSHOTER`.
+5. Откройте или обновите страницу любого поста на [x.com](https://x.com).
+
+#### Mozilla Firefox (121+)
+1. Введите в адресной строке Firefox: `about:debugging#/runtime/this-firefox`
+2. Нажмите кнопку **«Загрузить временное дополнение...»** (Load Temporary Add-on...)
+3. Выберите файл `manifest.json` в папке `SCREENSHOTER`.
+4. Откройте или обновите страницу любого поста на [x.com](https://x.com).
 
 ---
 
@@ -356,6 +374,7 @@ SCREENSHOTER/
 ├── html2canvas.min.js    # Вспомогательная библиотека рендеринга Canvas
 ├── feather/              # Набор SVG иконок Feather Icons
 ├── icons/                # Иконки расширения (16, 48, 128)
+├── screenshots/          # Демонстрационный баннер и скриншоты
 ├── LICENSE               # Текст лицензии MIT
 └── README.md             # Документация (на английском и русском языках)
 ```

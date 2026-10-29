@@ -23,7 +23,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     chrome.tabs.getZoom(tabId, (zoom) => {
-      sendResponse({ zoom: zoom || 1.0 });
+      if (chrome.runtime.lastError) {
+        sendResponse({ zoom: 1.0 });
+      } else {
+        sendResponse({ zoom: zoom || 1.0 });
+      }
     });
     return true;
   }
@@ -35,7 +39,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     chrome.tabs.setZoom(tabId, message.zoom, () => {
-      sendResponse({ success: true });
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true });
+      }
     });
     return true;
   }
@@ -53,8 +61,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleCaptureVisibleTab(sender, sendResponse) {
   try {
-    const windowId = sender?.tab?.windowId ?? null;
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+    const rawWinId = sender?.tab?.windowId;
+    const options = { format: 'png' };
+
+    // Cross-browser: In Firefox, passing null as windowId throws TypeError.
+    // Use callback with new Promise for universal Chromium & Gecko support.
+    const capturePromise = (typeof rawWinId === 'number' && rawWinId >= 0)
+      ? new Promise((resolve, reject) => {
+          chrome.tabs.captureVisibleTab(rawWinId, options, (dataUrl) => {
+            if (chrome.runtime.lastError) {
+              return reject(new Error(chrome.runtime.lastError.message));
+            }
+            resolve(dataUrl);
+          });
+        })
+      : new Promise((resolve, reject) => {
+          chrome.tabs.captureVisibleTab(options, (dataUrl) => {
+            if (chrome.runtime.lastError) {
+              return reject(new Error(chrome.runtime.lastError.message));
+            }
+            resolve(dataUrl);
+          });
+        });
+
+    const dataUrl = await capturePromise;
     sendResponse({ success: true, dataUrl });
   } catch (error) {
     console.error('[Screenshoter] captureVisibleTab error:', error);
@@ -70,11 +100,20 @@ async function handleDownloadImage(message, sendResponse) {
       filename = `${subfolder}/${filename}`;
     }
 
-    const downloadId = await chrome.downloads.download({
-      url: message.dataUrl || message.url,
-      filename: filename,
-      saveAs: !!message.saveAs
+    const downloadPromise = new Promise((resolve, reject) => {
+      chrome.downloads.download({
+        url: message.dataUrl || message.url,
+        filename: filename,
+        saveAs: !!message.saveAs
+      }, (downloadId) => {
+        if (chrome.runtime.lastError) {
+          return reject(new Error(chrome.runtime.lastError.message));
+        }
+        resolve(downloadId);
+      });
     });
+
+    const downloadId = await downloadPromise;
     sendResponse({ success: true, downloadId });
   } catch (error) {
     console.error('[Screenshoter] downloadImage error:', error);

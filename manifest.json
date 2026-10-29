@@ -3,6 +3,12 @@
   "name": "X/Twitter High-Res Post Screenshoter",
   "version": "1.0.0",
   "description": "High-Res screenshoter for X/Twitter posts, threads, quotes, and video/GIF recording with seamless stitching and Telegram MP4 export.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "twitter-screenshoter@antigravity",
+      "strict_min_version": "109.0"
+    }
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

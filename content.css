@@ -699,6 +699,23 @@ body.tw-screenshot-capturing::-webkit-scrollbar {
   background: #1a8cd8;
 }
 
+/* Firefox thumb support */
+.tw-crop-range::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 50%;
+  background: #1d9bf0;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.1s ease;
+}
+
+.tw-crop-range::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  background: #1a8cd8;
+}
+
 .tw-crop-ticks-row {
   display: flex;
   justify-content: space-between;

@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update active state on language buttons
     langButtons.forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-lang contractors') === lang || btn.getAttribute('data-lang') === lang);
+      btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
     });
 
     // Translate all elements with data-i18n
@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Event Listeners for inputs
   scaleRadios.forEach(r => r.addEventListener('change', saveSettings));
   engineRadios.forEach(r => r.addEventListener('change', saveSettings));
-  quotesOnlyCheckbox.addEventListener('change', saveSettings));
+  quotesOnlyCheckbox.addEventListener('change', saveSettings);
   if (hideActionBarCheckbox) {
     hideActionBarCheckbox.addEventListener('change', saveSettings);
   }

@@ -1,10 +1,15 @@
 # Generated output
 output/
-*.webm
-*.mp4
-*.png
-*.jpg
-*.jpeg
+/*.webm
+/*.mp4
+/*.png
+/*.jpg
+/*.jpeg
+
+# Allow documentation screenshots and extension icons
+!screenshots/
+!screenshots/*
+!icons/*.png
 
 # Python
 __pycache__/
