@@ -2343,14 +2343,24 @@
       const userScale = Number(config.scale) || 2;
       const videoScale = Math.max(1, Math.min(2, userScale));
 
-      let recW = Math.round(baseCanvas.width * videoScale);
+      let targetW = baseCanvas.width;
+      // Normalize standard Twitter primaryColumn width (~585px - 618px) to canonical 600px
+      // This eliminates the 598px vs 605px scrollbar/sidebar variance between Chromium and Firefox/Zen
+      if (targetW >= 585 && targetW <= 618) {
+        targetW = 600;
+      }
+
+      let recW = Math.round(targetW * videoScale);
       let recH = Math.round(baseCanvas.height * videoScale);
       if (recW % 2 !== 0) recW += 1;
       if (recH % 2 !== 0) recH += 1;
 
+      const scaleRatioX = recW / (baseCanvas.width || 1);
+      const scaleRatioY = recH / (baseCanvas.height || 1);
+
       // Scaled base canvas for background tweet chrome
       let scaledBaseCanvas = baseCanvas;
-      if (videoScale > 1) {
+      if (videoScale > 1 || Math.abs(scaleRatioX - 1) > 0.001 || Math.abs(scaleRatioY - 1) > 0.001) {
         scaledBaseCanvas = document.createElement('canvas');
         scaledBaseCanvas.width = recW;
         scaledBaseCanvas.height = recH;
@@ -2360,11 +2370,11 @@
         sCtx.drawImage(baseCanvas, 0, 0, recW, recH);
       }
 
-      const drawVx = Math.round(vx * videoScale);
-      const drawVy = Math.round(vy * videoScale);
-      const drawVw = Math.round(vw * videoScale);
-      const drawVh = Math.round(vh * videoScale);
-      const drawRadius = Math.round(scaledRadius * videoScale);
+      const drawVx = Math.round(vx * scaleRatioX);
+      const drawVy = Math.round(vy * scaleRatioY);
+      const drawVw = Math.round(vw * scaleRatioX);
+      const drawVh = Math.round(vh * scaleRatioY);
+      const drawRadius = Math.round(scaledRadius * scaleRatioX);
 
       recordCanvas = document.createElement('canvas');
       recordCanvas.width = recW;
@@ -2390,8 +2400,8 @@
       recCtx.imageSmoothingEnabled = true;
       recCtx.imageSmoothingQuality = 'high';
 
-      // 10. Create capture stream on the fresh canvas FIRST before drawing
-      const canvasStream = recordCanvas.captureStream(30);
+      // 10. Create capture stream on the fresh canvas FIRST before drawing (60 fps for silky-smooth motion)
+      const canvasStream = recordCanvas.captureStream(60);
       const videoTrack = canvasStream.getVideoTracks()[0];
 
       // Pre-draw initial frame

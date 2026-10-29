@@ -283,11 +283,12 @@ class StitcherHTTPHandler(BaseHTTPRequestHandler):
                 if not HAS_FFMPEG:
                     raise RuntimeError("FFmpeg не найден в PATH на этой машине.")
 
-                # Convert to Telegram-compatible H.264 MP4 (yuv420p + faststart + AAC) with visually lossless CRF 17
+                # Convert to Telegram-compatible H.264 MP4 (yuv420p + faststart + AAC) with visually lossless CRF 17 and normalized 60 fps
                 cmd = [
                     "ffmpeg", "-y",
                     "-i", temp_webm,
                     "-c:v", "libx264",
+                    "-r", "60",
                     "-crf", "17",
                     "-preset", "fast",
                     "-pix_fmt", "yuv420p",
