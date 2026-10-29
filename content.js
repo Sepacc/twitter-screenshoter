@@ -2288,35 +2288,50 @@
       recordCanvas = document.createElement('canvas');
       recordCanvas.width = recW;
       recordCanvas.height = recH;
-      // Attach to document tree offscreen so Firefox/Gecko active paint loop ticks frames into captureStream
+      // Show as floating HUD preview in viewport so Gecko/Firefox compositor actively renders frames for captureStream
+      const previewW = Math.min(260, Math.round((window.innerWidth || 1200) * 0.25));
+      const previewH = Math.round(previewW * (recH / (recW || 1)));
       recordCanvas.style.position = 'fixed';
-      recordCanvas.style.left = '-9999px';
-      recordCanvas.style.top = '-9999px';
-      recordCanvas.style.width = '2px';
-      recordCanvas.style.height = '2px';
-      recordCanvas.style.opacity = '0.01';
+      recordCanvas.style.top = '14px';
+      recordCanvas.style.right = '14px';
+      recordCanvas.style.width = previewW + 'px';
+      recordCanvas.style.height = previewH + 'px';
+      recordCanvas.style.zIndex = '2147483640';
+      recordCanvas.style.borderRadius = '10px';
+      recordCanvas.style.boxShadow = '0 8px 24px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.15)';
       recordCanvas.style.pointerEvents = 'none';
-      recordCanvas.style.zIndex = '-99999';
+      recordCanvas.style.display = 'block';
+      recordCanvas.style.visibility = 'visible';
+      recordCanvas.style.opacity = '1';
       document.body.appendChild(recordCanvas);
 
       const recCtx = recordCanvas.getContext('2d');
       recCtx.imageSmoothingEnabled = true;
       recCtx.imageSmoothingQuality = 'high';
 
+      // Pre-draw initial frame so canvas surface has valid content immediately
+      recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
+      recCtx.save();
+      drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
+      recCtx.clip();
+      try { recCtx.drawImage(videoEl, vx, vy, vw, vh); } catch (e) {}
+      recCtx.restore();
+
       // 10. Start video playback from beginning
       const origPaused = videoEl.paused;
       const origMuted = videoEl.muted;
       try {
         videoEl.currentTime = 0;
-      } catch (e) {}
-
-      try {
         await videoEl.play();
       } catch (e) {
         videoEl.muted = true;
         try { await videoEl.play(); } catch (e2) {}
       }
-      await sleep(100);
+      let playAttempts = 0;
+      while (videoEl.paused && playAttempts < 8) {
+        await sleep(60);
+        playAttempts++;
+      }
 
       // 9. Determine target cycle duration
       const vDur = videoEl.duration;
@@ -2469,31 +2484,53 @@
       const startTime = performance.now();
       let lastVTime = -1;
       let lastToastUpdate = 0;
+      let drawFrameCount = 0;
+      let lastDrawError = null;
+      let lastTaintError = null;
+      let hasCheckedTaint = false;
+      let recorderError = null;
 
       // 12. Render loop
       function drawFrame() {
         if (!isRecording && !isStopping) return;
 
-        // Draw static crisp base
-        recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
-
-        // Draw live video frame clipped with rounded corners
-        recCtx.save();
-        drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
-        recCtx.clip();
         try {
-          recCtx.drawImage(videoEl, vx, vy, vw, vh);
-        } catch (err) {}
+          // Draw static crisp base
+          recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
 
-        // Overlay active subtitles / closed captions if present and enabled
-        if (config.recordSubtitles !== false) {
-          const subText = getActiveSubtitleText(videoEl, videoTweet);
-          if (subText) {
-            drawSubtitlesOnCanvas(recCtx, subText, vx, vy, vw, vh);
+          // Draw live video frame clipped with rounded corners
+          recCtx.save();
+          drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
+          recCtx.clip();
+          try {
+            recCtx.drawImage(videoEl, vx, vy, vw, vh);
+          } catch (err) {
+            lastDrawError = err?.message || String(err);
           }
-        }
 
-        recCtx.restore();
+          // Overlay active subtitles / closed captions if present and enabled
+          if (config.recordSubtitles !== false) {
+            const subText = getActiveSubtitleText(videoEl, videoTweet);
+            if (subText) {
+              drawSubtitlesOnCanvas(recCtx, subText, vx, vy, vw, vh);
+            }
+          }
+
+          recCtx.restore();
+          drawFrameCount++;
+
+          if (!hasCheckedTaint) {
+            hasCheckedTaint = true;
+            try {
+              recCtx.getImageData(0, 0, 1, 1);
+            } catch (tErr) {
+              lastTaintError = tErr?.message || String(tErr);
+              console.error('[Screenshoter] Canvas is tainted:', tErr);
+            }
+          }
+        } catch (fErr) {
+          console.warn('[Screenshoter] drawFrame cycle error:', fErr);
+        }
 
         // Push frame update to canvas stream track (essential for Firefox/Gecko compositor)
         if (videoTrack && typeof videoTrack.requestFrame === 'function') {
@@ -2531,7 +2568,7 @@
         animFrameId = requestAnimationFrame(drawFrame);
       }
 
-      recorder.start();
+      recorder.start(100);
       animFrameId = requestAnimationFrame(drawFrame);
 
       // 13. Wait for recording to complete (clean native MediaRecorder WebM blob)
@@ -2566,7 +2603,8 @@
         onStopResolve = finish;
         recorder.onstop = finish;
         recorder.onerror = (err) => {
-          console.warn('[Screenshoter] MediaRecorder error event:', err);
+          recorderError = err?.error?.message || err?.message || 'MediaRecorder error';
+          console.warn('[Screenshoter] MediaRecorder error event:', recorderError, err);
           finish();
         };
 
@@ -2585,7 +2623,11 @@
       videoEl.muted = origMuted;
 
       if (!blob || blob.size < 1000) {
-        throw new Error('Video recording failed: empty stream (size ' + (blob?.size || 0) + ' bytes)');
+        let errDetails = `size ${blob?.size || 0} bytes, frames drawn: ${drawFrameCount}, chunks: ${chunks.length}`;
+        if (lastTaintError) errDetails += `, taint: ${lastTaintError}`;
+        if (lastDrawError) errDetails += `, drawErr: ${lastDrawError}`;
+        if (recorderError) errDetails += `, recErr: ${recorderError}`;
+        throw new Error(`Video recording failed: ${errDetails}`);
       }
 
       // 13.5. Fix WebM duration metadata client-side so standalone WebM has a valid timeline and seeking
