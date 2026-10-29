@@ -23,7 +23,7 @@ Additionally, it provides integrated video/GIF recording with automatic H.264/AA
 
 1. **Integrated Tweet Action Button**:
    - A dedicated camera button embedded directly into tweet action bars on status pages.
-   - Highlights with an accent indicator on Quote Tweets.
+   - Styled in native Twitter subtle gray (`rgb(113, 118, 123)`) to seamlessly blend with the platform's interface.
    - Dropdown menu offering context-aware capture modes.
 
 2. **Full-Thread Conversation Capture**:
@@ -227,7 +227,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 1. **Кнопка создания скриншота в панели твита**:
    - Аккуратная кнопка с камерой, встроенная в строку действий твита (`[role="group"]`).
-   - Для постов с цитатами кнопка подсвечивается акцентным цветом с индикатором-точкой.
+   - Оформлена в нативном сером цвете Twitter (`rgb(113, 118, 123)`), гармонично сочетаясь с остальными кнопками интерфейса.
    - Выпадающее меню с выбором режима захвата: текущий пост, вся ветка диалога или запись видео.
 
 2. **Захват всей ветки диалога (Thread Capture)**:

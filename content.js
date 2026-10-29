@@ -3111,7 +3111,7 @@
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `tw-screenshot-btn ${isQuote ? 'tw-quote-highlight' : ''}`;
+    btn.className = 'tw-screenshot-btn';
     btn.setAttribute('data-tooltip', t('btnTooltip'));
     btn.setAttribute('aria-label', t('btnTooltip'));
 
@@ -3119,7 +3119,6 @@
       <div class="tw-screenshot-btn-inner">
         ${CAMERA_ICON_SVG}
         ${CHEVRON_DOWN_SVG}
-        ${isQuote ? `<span class="tw-quote-badge" title="${t('cropBadgeQuote')}"></span>` : ''}
       </div>
     `;
 

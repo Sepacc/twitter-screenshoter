@@ -23,16 +23,17 @@
   align-items: center;
   justify-content: center;
   height: 34.75px;
-  padding: 0 6px;
-  min-width: 44px;
+  padding: 0 5px;
+  min-width: 36px;
   border-radius: 9999px;
-  transition: background-color 0.2s ease, transform 0.1s ease;
+  background-color: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
   gap: 2px;
 }
 
 .tw-screenshot-btn:hover .tw-screenshot-btn-inner,
 .tw-screenshot-btn.tw-menu-open .tw-screenshot-btn-inner {
-  background-color: rgba(29, 155, 240, 0.12);
+  background-color: rgba(29, 155, 240, 0.1);
   color: rgb(29, 155, 240);
 }
 
@@ -40,34 +41,21 @@
   transform: scale(0.94);
 }
 
-.tw-screenshot-btn.tw-quote-highlight {
-  color: rgb(29, 155, 240);
-}
-
-.tw-screenshot-btn.tw-quote-highlight .tw-screenshot-btn-inner {
-  background-color: rgba(29, 155, 240, 0.08);
-}
-
-.tw-screenshot-btn.tw-quote-highlight:hover .tw-screenshot-btn-inner,
-.tw-screenshot-btn.tw-quote-highlight.tw-menu-open .tw-screenshot-btn-inner {
-  background-color: rgba(29, 155, 240, 0.2);
-}
-
 .tw-screenshot-icon {
   width: 17.5px;
   height: 17.5px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.85;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .tw-chevron-icon {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   fill: currentColor;
-  opacity: 0.7;
+  opacity: 0.55;
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
@@ -111,14 +99,7 @@
 
 /* Quote badge indicator */
 .tw-quote-badge {
-  position: absolute;
-  top: 4px;
-  left: 17px;
-  width: 6px;
-  height: 6px;
-  background-color: #1d9bf0;
-  border-radius: 50%;
-  border: 1.5px solid #000;
+  display: none !important;
 }
 
 /* Dropdown Menu UI */
