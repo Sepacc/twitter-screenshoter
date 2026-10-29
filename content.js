@@ -90,6 +90,7 @@
       toastRenderingHiRes: (s) => `Rendering in high resolution (${s}x)...`,
       toastSnapshot: 'Capturing post layout',
       toastRecording: 'Recording video...',
+      toastFinalizing: 'Finalizing recording...',
       toastConvertingMp4: 'Converting to MP4...',
       toastEncodingH264: 'Encoding H.264 for Telegram without quality loss...',
       toastPyOffline: 'Python server offline',
@@ -178,6 +179,7 @@
       toastRenderingHiRes: (s) => `Рендеринг в высоком разрешении (${s}x)...`,
       toastSnapshot: 'Снимок оформления поста',
       toastRecording: 'Запись видео...',
+      toastFinalizing: 'Завершение записи...',
       toastConvertingMp4: 'Конвертация в MP4...',
       toastEncodingH264: 'Кодирование H.264 для Telegram без потери качества...',
       toastPyOffline: 'Python-сервер офлайн',
@@ -2341,36 +2343,49 @@
       // 10. Setup MediaRecorder with Audio support
       const canvasStream = recordCanvas.captureStream(30);
       let recordStream = canvasStream;
+      let hasAudio = false;
 
-      try {
-        const vStream = typeof videoEl.captureStream === 'function'
-          ? videoEl.captureStream()
-          : (typeof videoEl.mozCaptureStream === 'function' ? videoEl.mozCaptureStream() : null);
-        if (vStream) {
-          const aTracks = vStream.getAudioTracks();
-          if (aTracks && aTracks.length > 0) {
-            recordStream = new MediaStream([
-              ...canvasStream.getVideoTracks(),
-              aTracks[0]
-            ]);
+      // Only attempt to attach audio for real videos with sound (never for GIFs, short loops, or muted posts)
+      const isGifLike = !vDur || vDur < 2.5 || videoEl.loop;
+      if (!isGifLike && !origMuted) {
+        try {
+          const vStream = typeof videoEl.captureStream === 'function'
+            ? videoEl.captureStream()
+            : (typeof videoEl.mozCaptureStream === 'function' ? videoEl.mozCaptureStream() : null);
+          if (vStream) {
+            const aTracks = vStream.getAudioTracks();
+            if (aTracks && aTracks.length > 0 && aTracks[0].readyState === 'live') {
+              recordStream = new MediaStream([
+                ...canvasStream.getVideoTracks(),
+                aTracks[0]
+              ]);
+              hasAudio = true;
+            }
           }
+        } catch (e) {
+          console.log('[Screenshoter] Audio track capture note:', e);
         }
-      } catch (e) {
-        console.log('[Screenshoter] Audio track capture note:', e);
       }
 
-      let mimeType = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm;codecs=vp8,opus';
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm;codecs=vp9';
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm;codecs=vp8';
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm';
+      // Select mimeType strictly based on whether hasAudio is true.
+      // In Firefox, requesting 'opus' when recordStream has NO audio track causes MediaRecorder to hang indefinitely on stop()!
+      let mimeType = '';
+      if (hasAudio) {
+        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+          mimeType = 'video/webm;codecs=vp9,opus';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+          mimeType = 'video/webm;codecs=vp8,opus';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+          mimeType = 'video/webm';
+        }
+      } else {
+        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+          mimeType = 'video/webm;codecs=vp9';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+          mimeType = 'video/webm;codecs=vp8';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+          mimeType = 'video/webm';
+        }
       }
 
       const chunks = [];
@@ -2399,13 +2414,35 @@
       // 11. Start recording & show progress toast with Stop button
       prepToast.close();
       isRecording = true;
+      let isStopping = false;
+      let onStopResolve = null;
 
       const stopRecording = () => {
-        if (!isRecording) return;
+        if (!isRecording) {
+          if (isStopping && onStopResolve) {
+            onStopResolve();
+          }
+          return;
+        }
         isRecording = false;
-        if (animFrameId) cancelAnimationFrame(animFrameId);
-        if (recorder.state === 'recording') {
-          recorder.stop();
+        isStopping = true;
+
+        if (recToast) {
+          recToast.update({
+            title: `${REC_DOT_ICON_SVG}<span>${t('toastRecording')}</span>`,
+            subtitle: t('toastFinalizing')
+          });
+        }
+
+        try {
+          if (recorder && recorder.state === 'recording') {
+            recorder.stop();
+          } else if (onStopResolve) {
+            onStopResolve();
+          }
+        } catch (err) {
+          console.warn('[Screenshoter] Error stopping recorder:', err);
+          if (onStopResolve) onStopResolve();
         }
       };
 
@@ -2423,7 +2460,7 @@
 
       // 12. Render loop
       function drawFrame() {
-        if (!isRecording) return;
+        if (!isRecording && !isStopping) return;
 
         // Draw static crisp base
         recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
@@ -2445,6 +2482,12 @@
         }
 
         recCtx.restore();
+
+        // While stopping, keep drawing frames so canvas.captureStream flushes encoder in Firefox
+        if (isStopping) {
+          animFrameId = requestAnimationFrame(drawFrame);
+          return;
+        }
 
         const now = performance.now();
         const elapsedSec = (now - startTime) / 1000;
@@ -2476,9 +2519,25 @@
 
       // 13. Wait for recording to complete (clean native MediaRecorder WebM blob)
       const blob = await new Promise((resolve) => {
-        recorder.onstop = () => {
-          resolve(new Blob(chunks, { type: mimeType }));
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          isStopping = false;
+          if (animFrameId) cancelAnimationFrame(animFrameId);
+          onStopResolve = null;
+          resolve(new Blob(chunks, { type: mimeType || 'video/webm' }));
         };
+
+        onStopResolve = finish;
+        recorder.onstop = finish;
+        recorder.onerror = (err) => {
+          console.warn('[Screenshoter] MediaRecorder error event:', err);
+          finish();
+        };
+
+        // Safety timeout so recording never hangs forever even if browser encoder stalls
+        setTimeout(finish, 3000);
       });
 
       if (recToast) recToast.close();
