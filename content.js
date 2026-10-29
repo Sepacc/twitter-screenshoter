@@ -1398,6 +1398,31 @@
     ctx.restore();
   }
 
+  // Helper to identify action bar elements (reply, retweet, like, bookmark, share, etc.)
+  function isActionBarElement(el) {
+    if (!el) return false;
+    if (el.closest && el.closest('div[role="group"]')) return true;
+    const tid = (el.getAttribute && el.getAttribute('data-testid') || '').toLowerCase();
+    if (
+      tid.includes('retweet') || tid.includes('unretweet') ||
+      tid.includes('reply') || tid.includes('like') || tid.includes('unlike') ||
+      tid.includes('bookmark') || tid.includes('share')
+    ) {
+      return true;
+    }
+    const aria = (el.getAttribute && el.getAttribute('aria-label') || '').toLowerCase();
+    if (
+      aria.includes('repost') || aria.includes('retweet') || aria.includes('ретвит') ||
+      aria.includes('reply') || aria.includes('ответить') ||
+      aria.includes('like') || aria.includes('нравится') ||
+      aria.includes('bookmark') || aria.includes('закладк') ||
+      aria.includes('share') || aria.includes('поделиться')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   // Helper to remove sticky headers, back button, "Relevant", "View quotes", reply boxes
   function preparePageForCapture(tweetEl) {
     const restores = [];
@@ -1446,6 +1471,8 @@
     // 3. Hide "View quotes" links
     const viewQuotes = document.querySelectorAll('a[href*="/quotes"], [data-testid="view-quotes"]');
     for (const el of viewQuotes) {
+      if (tweetEl && tweetEl.contains(el)) continue;
+      if (isActionBarElement(el)) continue;
       const container = el.closest('div[style*="flex"], div[class*="r-"]') || el;
       hideEl(container);
     }
@@ -1453,6 +1480,8 @@
     // 4. Hide "Relevant" sorting dropdown and reply composers
     const allSpans = document.querySelectorAll('span, button, a, div[role="button"]');
     for (const item of allSpans) {
+      if (tweetEl && tweetEl.contains(item)) continue;
+      if (isActionBarElement(item)) continue;
       const t = (item.textContent || '').trim().toLowerCase();
       if (t === 'relevant' || t.startsWith('relevant') || t === 'view quotes' || t === 'сначала актуальные' || t === 'показать цитаты') {
         const block = item.closest('div[style*="flex"], div[class*="r-"]') || item;
@@ -1494,17 +1523,18 @@
       }
     }
 
-    // Hide More (...) / Caret menu buttons and any adjacent custom action buttons (e.g. quick block/mute Ø)
+    // Hide More (...) / Caret menu buttons and any adjacent custom action buttons (e.g. quick block/mute)
     const moreBtns = document.querySelectorAll(
-      'button[aria-label*="More"], button[aria-label*="Ещё"], button[aria-haspopup="menu"], [data-testid="caret"]'
+      '[data-testid="caret"], button[aria-label="More"], button[aria-label="Ещё"], button[aria-label="Больше"], button[aria-label*="More actions"], button[aria-label*="Больше действий"]'
     );
     for (const mb of moreBtns) {
+      if (isActionBarElement(mb)) continue;
       const btn = mb.closest('button, [role="button"]') || mb;
-      if (btn) {
+      if (btn && !isActionBarElement(btn)) {
         hideEl(btn);
-        if (btn.parentElement) {
+        if (btn.parentElement && !isActionBarElement(btn.parentElement)) {
           for (const sib of btn.parentElement.children) {
-            if (sib !== btn && !sib.contains(btn) && !btn.contains(sib)) {
+            if (sib !== btn && !sib.contains(btn) && !btn.contains(sib) && !isActionBarElement(sib)) {
               hideEl(sib);
             }
           }
@@ -1521,6 +1551,7 @@
     }
     const allPageButtons = document.querySelectorAll('article[data-testid="tweet"] button, article[data-testid="tweet"] div[role="button"], article[data-testid="tweet"] a[role="button"]');
     for (const b of allPageButtons) {
+      if (isActionBarElement(b)) continue;
       const txt = (b.textContent || '').trim().toLowerCase();
       if (
         txt === 'follow' || txt === 'читать' || txt === 'отслеживать' ||
@@ -1627,6 +1658,7 @@
       }
       const allButtonsInTweet = tweetEl.querySelectorAll('button, div[role="button"], a[role="button"]');
       for (const b of allButtonsInTweet) {
+        if (isActionBarElement(b)) continue;
         const txt = (b.textContent || '').trim().toLowerCase();
         if (
           txt === 'follow' || txt === 'читать' || txt === 'отслеживать' ||
@@ -1664,17 +1696,18 @@
         }
       }
 
-      // Hide More (...) / Caret menu buttons and any adjacent custom action buttons (e.g. quick block/mute Ø)
+      // Hide More (...) / Caret menu buttons and any adjacent custom action buttons (e.g. quick block/mute)
       const tweetMoreBtns = tweetEl.querySelectorAll(
-        'button[aria-label*="More"], button[aria-label*="Ещё"], button[aria-haspopup="menu"], [data-testid="caret"]'
+        '[data-testid="caret"], button[aria-label="More"], button[aria-label="Ещё"], button[aria-label="Больше"], button[aria-label*="More actions"], button[aria-label*="Больше действий"]'
       );
       for (const mb of tweetMoreBtns) {
+        if (isActionBarElement(mb)) continue;
         const btn = mb.closest('button, [role="button"]') || mb;
-        if (btn) {
+        if (btn && !isActionBarElement(btn)) {
           hideLocal(btn);
-          if (btn.parentElement) {
+          if (btn.parentElement && !isActionBarElement(btn.parentElement)) {
             for (const sib of btn.parentElement.children) {
-              if (sib !== btn && !sib.contains(btn) && !btn.contains(sib)) {
+              if (sib !== btn && !sib.contains(btn) && !btn.contains(sib) && !isActionBarElement(sib)) {
                 hideLocal(sib);
               }
             }
@@ -1695,7 +1728,7 @@
         if (actionBars.length > 0) {
           const lastAb = actionBars[actionBars.length - 1];
           const abRect = lastAb.getBoundingClientRect();
-          bottomY = abRect.bottom + 8;
+          bottomY = Math.max(rect.bottom, abRect.bottom + 14);
         }
       } else {
         // When hiding action bar, find the lowest visible content element in the tweet
@@ -1750,7 +1783,7 @@
       }
 
       const totalWidth = Math.max(100, Math.round(rect.width || tweetEl.offsetWidth || 600));
-      const viewportHeight = window.innerHeight;
+      const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
 
       const slices = [];
       let capturedUpTo = 0;
@@ -1815,8 +1848,10 @@
     const firstImg = await loadImage(slices[0].dataUrl);
     const imgW = firstImg.naturalWidth || firstImg.width;
     const imgH = firstImg.naturalHeight || firstImg.height;
-    const scaleX = imgW / window.innerWidth;
-    const scaleY = imgH / window.innerHeight;
+    const viewportW = document.documentElement.clientWidth || window.innerWidth;
+    const viewportH = document.documentElement.clientHeight || window.innerHeight;
+    const scaleX = imgW / viewportW;
+    const scaleY = imgH / viewportH;
 
     const canvasWidth = Math.max(10, Math.round(totalWidth * scaleX));
     const canvasHeight = Math.max(10, Math.round(totalHeight * scaleY));

@@ -354,10 +354,15 @@ body.tw-screenshot-capturing a[href*="/creator-subscriptions"],
 body.tw-screenshot-capturing [data-testid*="grok"],
 body.tw-screenshot-capturing [data-testid*="Grok"],
 body.tw-screenshot-capturing a[href*="/i/grok"],
-body.tw-screenshot-capturing button[aria-label*="More"],
-body.tw-screenshot-capturing button[aria-label*="Ещё"],
+body.tw-screenshot-capturing button[aria-label*="More"]:not(div[role="group"] *),
+body.tw-screenshot-capturing button[aria-label*="Ещё"]:not(div[role="group"] *),
 body.tw-screenshot-capturing [data-testid="caret"] {
   display: none !important;
+}
+
+body.tw-screenshot-capturing div[role="group"] button,
+body.tw-screenshot-capturing div[role="group"] [role="button"] {
+  display: inline-flex !important;
 }
 
 /* Hide scrollbars during capture */
