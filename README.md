@@ -108,11 +108,18 @@ Saved media files follow a predictable, clean naming format:
 4. Select the `SCREENSHOTER` folder.
 5. Open or refresh any post on [x.com](https://x.com).
 
-#### Mozilla Firefox (121+)
-1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox` in the address bar.
+#### Mozilla Firefox / Zen Browser (109+)
+
+**Option A (Load from source folder - Recommended):**
+1. Open Firefox or Zen Browser and go to `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on...**
 3. Select the `manifest.json` file inside the `SCREENSHOTER` folder.
 4. Open or refresh any post on [x.com](https://x.com).
+
+**Option B (Load from package archive):**
+1. Run `package.bat` (or `python package.py`) to build `twitter-screenshoter.zip` / `.xpi`.
+2. In `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on...** and select `twitter-screenshoter.zip` or `twitter-screenshoter.xpi`.
+*(Note: Downloading repository ZIP directly from GitHub wraps files into a top-level folder, which causes Firefox to report "does not contain a valid manifest". Select `manifest.json` directly or use `package.bat`).*
 
 ---
 
@@ -305,11 +312,18 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 4. Выберите папку `SCREENSHOTER`.
 5. Откройте или обновите страницу любого поста на [x.com](https://x.com).
 
-#### Mozilla Firefox (121+)
-1. Введите в адресной строке Firefox: `about:debugging#/runtime/this-firefox`
+#### Mozilla Firefox / Zen Browser (109+)
+
+**Вариант А (Загрузка из папки исходников — рекомендуется):**
+1. Введите в адресной строке Firefox или Zen Browser: `about:debugging#/runtime/this-firefox`
 2. Нажмите кнопку **«Загрузить временное дополнение...»** (Load Temporary Add-on...)
 3. Выберите файл `manifest.json` в папке `SCREENSHOTER`.
 4. Откройте или обновите страницу любого поста на [x.com](https://x.com).
+
+**Вариант Б (Загрузка из готового архива):**
+1. Запустите `package.bat` (или выполните команду `python package.py`), чтобы создать архив `twitter-screenshoter.zip` или `.xpi` (с `manifest.json` в корне архива).
+2. В `about:debugging#/runtime/this-firefox` нажмите **«Загрузить временное дополнение...»** и выберите `twitter-screenshoter.zip` или `twitter-screenshoter.xpi`.
+*(Примечание: архив «Download ZIP», скачанный напрямую со страницы GitHub, помещает файлы в подпапку репозитория, из-за чего браузер сообщает «does not contain a valid manifest». Всегда выбирайте файл `manifest.json` напрямую либо используйте `package.bat`).*
 
 ---
 

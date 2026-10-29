@@ -669,7 +669,7 @@
     if (v && v.readyState >= 1) return v;
 
     // Scroll into comfortable view so Twitter's lazy observer initializes the player
-    tweetEl.scrollIntoView({ block: 'center', behavior: 'instant' });
+    tweetEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
     await sleep(150);
 
     v = findTweetVideo(tweetEl);
@@ -1609,7 +1609,7 @@
     await expandTruncatedText(tweetEl);
 
     // 2. Scroll tweet into viewport to ensure it is rendered and measurable
-    tweetEl.scrollIntoView({ block: 'start', behavior: 'instant' });
+    tweetEl.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
     await sleep(150);
 
     const localRestores = [];
@@ -2098,6 +2098,9 @@
       return;
     }
 
+    const origPaused = videoEl.paused;
+    const origMuted = videoEl.muted;
+
     // Pause other videos on the page so their playback/audio does not interfere
     try {
       const allVideos = document.querySelectorAll('video');
@@ -2198,7 +2201,7 @@
         const tweetCanvases = [];
         for (let i = 0; i < threadTweets.length; i++) {
           const t = threadTweets[i];
-          t.scrollIntoView({ block: 'start', behavior: 'instant' });
+          t.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
           await sleep(150);
           const tRes = await captureSingleTweetCanvas(t, isQuoteTweet(t));
           tweetCanvases.push(tRes);
@@ -2216,7 +2219,7 @@
         videoTweetCanvasX = Math.max(0, Math.round((baseCanvas.width - tweetCanvases[effectiveVideoOffset].canvas.width) / 2));
         videoTweetCanvasWidth = tweetCanvases[effectiveVideoOffset].canvas.width;
       } else {
-        videoTweet.scrollIntoView({ block: 'start', behavior: 'instant' });
+        videoTweet.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
         await sleep(100);
         const baseResult = await captureSingleTweetCanvas(videoTweet, isQuoteTweet(videoTweet));
         baseCanvas = baseResult.canvas;
@@ -2299,16 +2302,33 @@
             if (blobRes?.success && blobRes.dataUrl) {
               const cv = document.createElement('video');
               cv.crossOrigin = 'anonymous';
-              cv.muted = origMuted;
+              cv.muted = true;
               cv.loop = isGifLike || !!mediaRes.isGif;
               cv.playsInline = true;
+              cv.preload = 'auto';
               cv.src = blobRes.dataUrl;
+
+              // Firefox Gecko requirement: unattached video element does not advance video decoder texture
+              cv.style.position = 'fixed';
+              cv.style.top = '-9999px';
+              cv.style.left = '-9999px';
+              cv.style.width = '16px';
+              cv.style.height = '16px';
+              cv.style.opacity = '0.001';
+              cv.style.pointerEvents = 'none';
+              document.body.appendChild(cv);
+
               await new Promise(r => {
+                if (cv.readyState >= 2) return r();
+                cv.onloadeddata = r;
                 cv.oncanplay = r;
                 setTimeout(r, 1200);
               });
               try { cv.currentTime = videoEl.currentTime || 0; } catch (e) {}
               try { await cv.play(); } catch (e) {}
+              if (!origMuted && !isGifLike) {
+                try { cv.muted = false; } catch (e) {}
+              }
               cleanVideoEl = cv;
             }
           }
@@ -2362,9 +2382,11 @@
       recCtx.restore();
 
       // 11. Start video playback from beginning
-      const origPaused = videoEl.paused;
-      const origMuted = videoEl.muted;
       try {
+        if (cleanVideoEl) {
+          cleanVideoEl.currentTime = 0;
+          await cleanVideoEl.play();
+        }
         videoEl.currentTime = 0;
         await videoEl.play();
       } catch (e) {
@@ -2372,7 +2394,7 @@
         try { await videoEl.play(); } catch (e2) {}
       }
       let playAttempts = 0;
-      while (videoEl.paused && playAttempts < 8) {
+      while (activeVideo.paused && playAttempts < 8) {
         await sleep(60);
         playAttempts++;
       }
@@ -2557,6 +2579,11 @@
           }
 
           recCtx.restore();
+
+          // Sub-perceptible micro-pixel flip (0.01 opacity at 0,0) guarantees Gecko WebRender marks canvas dirty on every tick
+          recCtx.fillStyle = (drawFrameCount % 2 === 0) ? 'rgba(0,0,0,0.01)' : 'rgba(1,1,1,0.01)';
+          recCtx.fillRect(0, 0, 1, 1);
+
           drawFrameCount++;
 
           if (!hasCheckedTaint) {
@@ -2834,9 +2861,14 @@
           cleanVideoEl.removeAttribute('src');
           cleanVideoEl.load();
         } catch (e) {}
+        if (cleanVideoEl.parentNode) {
+          try { cleanVideoEl.parentNode.removeChild(cleanVideoEl); } catch (e) {}
+        }
         cleanVideoEl = null;
       }
       window.scrollTo({ left: originalScrollX, top: originalScrollY, behavior: 'instant' });
+      try { document.documentElement.scrollLeft = originalScrollX; } catch (e) {}
+      try { document.body.scrollLeft = originalScrollX; } catch (e) {}
     }
   }
 
@@ -2949,7 +2981,7 @@
         });
 
         // Scroll current tweet to top of viewport
-        currentTweet.scrollIntoView({ block: 'start', behavior: 'instant' });
+        currentTweet.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
         await sleep(150);
 
         // Capture tweet canvas

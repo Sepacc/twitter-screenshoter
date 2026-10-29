@@ -234,6 +234,28 @@ async function handleGetTweetMediaVideo(tweetId, sendResponse) {
     console.warn('[Screenshoter] VxTwitter API note:', e);
   }
 
+  // 3. Fallback to fxtwitter API
+  try {
+    const res = await fetch(`https://api.fxtwitter.com/status/${tweetId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const media = data?.tweet?.media;
+      if (media?.videos && media.videos.length > 0) {
+        const mp4 = media.videos[0].url;
+        if (mp4) {
+          sendResponse({
+            success: true,
+            videoUrl: mp4,
+            isGif: media.videos[0].type === 'gif'
+          });
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Screenshoter] FxTwitter API note:', e);
+  }
+
   sendResponse({ success: false, error: 'Could not resolve media video URL' });
 }
 

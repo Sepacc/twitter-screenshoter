@@ -5,6 +5,8 @@ output/
 /*.png
 /*.jpg
 /*.jpeg
+*.zip
+*.xpi
 
 # Allow documentation screenshots and extension icons
 !screenshots/
