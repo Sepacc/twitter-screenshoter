@@ -46,6 +46,7 @@
         "https://twitter.com/*"
       ],
       "js": [
+        "fix-webm-duration.js",
         "content.js"
       ],
       "css": [

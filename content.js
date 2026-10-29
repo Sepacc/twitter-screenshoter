@@ -2135,18 +2135,11 @@
     const targetOffsetInThread = threadTweets.indexOf(tweetEl);
     const videoTweetOffsetInThread = threadTweets.indexOf(videoTweet);
 
-    const rawScale = Math.max(1, Number(config.scale) || 2);
-    const screenWidth = window.screen.width || 1366;
-    const availWidth = Math.min(screenWidth, window.innerWidth || screenWidth);
-    const maxSafeScale = Math.max(1, Math.floor((availWidth / 620) * 10) / 10);
-    const scaleFactor = Math.min(rawScale, maxSafeScale);
-    let originalZoom = 1.0;
-
     const prepToast = showToast({
       title: t('toastPrepRec'),
       subtitle: captureAsThread
         ? t('toastRenderingThread', threadTweets.length)
-        : (scaleFactor > 1 ? t('toastRenderingHiRes', scaleFactor) : t('toastSnapshot')),
+        : t('toastSnapshot'),
       loading: true,
       duration: 0
     });
@@ -2157,7 +2150,8 @@
     let recToast = null;
     let isRecording = false;
 
-    const originalScrollY = window.scrollY;
+    const originalScrollX = window.scrollX || 0;
+    const originalScrollY = window.scrollY || 0;
     const originalPaddingBottom = document.body.style.paddingBottom;
     const originalMinHeight = document.body.style.minHeight;
 
@@ -2185,18 +2179,6 @@
         }
       }
 
-      // 3. Temporarily set browser zoom to scaleFactor for crisp high-res UI text & avatars
-      if (scaleFactor > 1) {
-        try {
-          const zoomRes = await chrome.runtime.sendMessage({ action: 'getZoom' });
-          originalZoom = zoomRes?.zoom || 1.0;
-          await chrome.runtime.sendMessage({ action: 'setZoom', zoom: originalZoom * scaleFactor });
-          await sleep(220);
-        } catch (zErr) {
-          console.warn('[Screenshoter] Zoom adjustment failed:', zErr);
-        }
-      }
-
       restoreElements = preparePageForCapture(tweetEl);
       document.body.classList.add('tw-screenshot-capturing');
 
@@ -2204,7 +2186,7 @@
       document.body.style.minHeight = (document.body.scrollHeight + viewportHeight * 3) + 'px';
       document.body.style.paddingBottom = (viewportHeight * 2) + 'px';
 
-      // 4. Capture static base canvas for tweet / thread in crisp high-res
+      // 3. Capture static base canvas for tweet / thread in crisp high-res
       let baseCanvas;
       let videoTweetCanvasX = 0;
       let videoTweetCanvasY = 0;
@@ -2241,24 +2223,21 @@
         videoTweetCanvasWidth = baseCanvas.width;
       }
 
-      // 5. Restore zoom back to normal for live playback and recording
+      // 4. Immediately restore page elements and body size so Twitter's layout is completely normal and uncorrupted
+      if (restoreElements) {
+        try { restoreElements(); } catch (e) {}
+        restoreElements = null;
+      }
       document.body.classList.remove('tw-screenshot-capturing');
       document.body.style.minHeight = originalMinHeight;
       document.body.style.paddingBottom = originalPaddingBottom;
 
-      if (scaleFactor > 1) {
-        try {
-          await chrome.runtime.sendMessage({ action: 'setZoom', zoom: originalZoom });
-          await sleep(180);
-        } catch (zErr) {}
-      }
-
-      // 6. Scroll target video into comfortable view so browser actively decodes frames
-      videoTweet.scrollIntoView({ block: 'center', behavior: 'instant' });
+      // 5. Scroll target video into comfortable view without horizontal scroll shift
+      videoTweet.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
       await sleep(100);
       const vRectNow = videoEl.getBoundingClientRect();
       if (vRectNow.bottom > window.innerHeight || vRectNow.top < 0) {
-        videoEl.scrollIntoView({ block: 'center', behavior: 'instant' });
+        videoEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
         await sleep(80);
       }
 
@@ -2368,21 +2347,21 @@
       }
 
       // Select mimeType strictly based on whether hasAudio is true.
-      // In Firefox, requesting 'opus' when recordStream has NO audio track causes MediaRecorder to hang indefinitely on stop()!
+      // Prefer VP8 for maximum compatibility with WebM media players (Telegram, Windows, VLC)
       let mimeType = '';
       if (hasAudio) {
-        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
-          mimeType = 'video/webm;codecs=vp9,opus';
-        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
           mimeType = 'video/webm;codecs=vp8,opus';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+          mimeType = 'video/webm;codecs=vp9,opus';
         } else if (MediaRecorder.isTypeSupported('video/webm')) {
           mimeType = 'video/webm';
         }
       } else {
-        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
-          mimeType = 'video/webm;codecs=vp9';
-        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
           mimeType = 'video/webm;codecs=vp8';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+          mimeType = 'video/webm;codecs=vp9';
         } else if (MediaRecorder.isTypeSupported('video/webm')) {
           mimeType = 'video/webm';
         }
@@ -2547,6 +2526,17 @@
       }
       videoEl.muted = origMuted;
 
+      // 13.5. Fix WebM duration metadata client-side so standalone WebM has a valid timeline and seeking
+      let finalWebmBlob = blob;
+      if (typeof ysFixWebmDuration === 'function') {
+        try {
+          const actualDurationMs = Math.max(500, Math.round(performance.now() - startTime));
+          finalWebmBlob = await ysFixWebmDuration(blob, actualDurationMs, { logger: false });
+        } catch (durErr) {
+          console.warn('[Screenshoter] WebM duration fix warning:', durErr);
+        }
+      }
+
       // 14. Format handling & MP4 Conversion
       const meta = getTweetMeta(tweetEl);
       const isMp4Preferred = (config.videoFormat || 'mp4') === 'mp4';
@@ -2581,7 +2571,7 @@
                 resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
               };
               reader.onerror = reject;
-              reader.readAsDataURL(blob);
+              reader.readAsDataURL(finalWebmBlob);
             });
 
             const convRes = await new Promise((resolve) => {
@@ -2619,7 +2609,7 @@
                 subtitle: `${convRes?.error || t('toastFfmpegCrash')}. ${t('toastClickDownloadWebm')}`,
                 error: true,
                 duration: 8000,
-                onDownload: () => downloadBlob(blob, fallbackWebmFilename)
+                onDownload: () => downloadBlob(finalWebmBlob, fallbackWebmFilename)
               });
               return;
             }
@@ -2631,7 +2621,7 @@
               subtitle: t('toastConvErrorSub'),
               error: true,
               duration: 8000,
-              onDownload: () => downloadBlob(blob, fallbackWebmFilename)
+              onDownload: () => downloadBlob(finalWebmBlob, fallbackWebmFilename)
             });
             return;
           }
@@ -2641,7 +2631,7 @@
             title: t('toastPyOffline'),
             subtitle: t('toastPyOfflineSub'),
             duration: 8000,
-            onDownload: () => downloadBlob(blob, fallbackWebmFilename)
+            onDownload: () => downloadBlob(finalWebmBlob, fallbackWebmFilename)
           });
           return;
         }
@@ -2649,20 +2639,20 @@
 
       // Explicit WebM mode (chosen in extension settings)
       const filename = `${baseFilename}.webm`;
-      const videoUrl = URL.createObjectURL(blob);
+      const videoUrl = URL.createObjectURL(finalWebmBlob);
 
       if (config.autoDownload) {
-        downloadBlob(blob, filename);
+        downloadBlob(finalWebmBlob, filename);
       }
 
-      const sizeMb = (blob.size / (1024 * 1024)).toFixed(2);
+      const sizeMb = (finalWebmBlob.size / (1024 * 1024)).toFixed(2);
       showToast({
         title: captureAsThread ? t('toastThreadVideoSuccess') : t('toastWebmSuccess'),
         subtitle: `${filename} (${recW}×${recH}, ${sizeMb} ${t('mb')})`,
         success: true,
         videoUrl: videoUrl,
         duration: 8000,
-        onDownload: () => downloadBlob(blob, filename)
+        onDownload: () => downloadBlob(finalWebmBlob, filename)
       });
 
     } catch (err) {
@@ -2682,20 +2672,15 @@
       document.body.style.minHeight = originalMinHeight;
       document.body.style.paddingBottom = originalPaddingBottom;
 
-      if (scaleFactor > 1) {
-        try {
-          await chrome.runtime.sendMessage({ action: 'setZoom', zoom: originalZoom });
-        } catch (zErr) {}
-      }
-
       if (animFrameId) cancelAnimationFrame(animFrameId);
       for (const cr of controlRestores) {
         try { cr(); } catch (e) {}
       }
       if (restoreElements) {
         try { restoreElements(); } catch (e) {}
+        restoreElements = null;
       }
-      window.scrollTo({ top: originalScrollY, behavior: 'instant' });
+      window.scrollTo({ left: originalScrollX, top: originalScrollY, behavior: 'instant' });
     }
   }
 
