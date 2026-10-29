@@ -2150,6 +2150,7 @@
     let recToast = null;
     let isRecording = false;
     let recordCanvas = null;
+    let cleanVideoEl = null;
 
     const originalScrollX = window.scrollX || 0;
     const originalScrollY = window.scrollY || 0;
@@ -2279,6 +2280,45 @@
       if (!borderRadius) borderRadius = 14;
       const scaledRadius = Math.round(borderRadius * scale);
 
+      const vDur = videoEl.duration;
+      const isGifLike = !vDur || vDur < 3.5 || videoEl.loop || videoEl.muted || origMuted;
+
+      // 8.5 Attempt to resolve clean direct video URL via Extension Background to completely eliminate Tainted Canvas in Firefox & Chrome
+      const videoMeta = getTweetMeta(videoTweet);
+      const targetTweetId = videoMeta?.tweetId;
+
+      if (targetTweetId) {
+        try {
+          const mediaRes = await new Promise(r => {
+            chrome.runtime.sendMessage({ action: 'getTweetMediaVideo', tweetId: targetTweetId }, r);
+          });
+          if (mediaRes?.success && mediaRes.videoUrl) {
+            const blobRes = await new Promise(r => {
+              chrome.runtime.sendMessage({ action: 'fetchVideoBlob', url: mediaRes.videoUrl }, r);
+            });
+            if (blobRes?.success && blobRes.dataUrl) {
+              const cv = document.createElement('video');
+              cv.crossOrigin = 'anonymous';
+              cv.muted = origMuted;
+              cv.loop = isGifLike || !!mediaRes.isGif;
+              cv.playsInline = true;
+              cv.src = blobRes.dataUrl;
+              await new Promise(r => {
+                cv.oncanplay = r;
+                setTimeout(r, 1200);
+              });
+              try { cv.currentTime = videoEl.currentTime || 0; } catch (e) {}
+              try { await cv.play(); } catch (e) {}
+              cleanVideoEl = cv;
+            }
+          }
+        } catch (cleanErr) {
+          console.warn('[Screenshoter] Clean video setup note:', cleanErr);
+        }
+      }
+
+      const activeVideo = cleanVideoEl || videoEl;
+
       // 9. Setup record canvas with even dimensions and high smoothing quality
       let recW = baseCanvas.width;
       let recH = baseCanvas.height;
@@ -2309,15 +2349,19 @@
       recCtx.imageSmoothingEnabled = true;
       recCtx.imageSmoothingQuality = 'high';
 
-      // Pre-draw initial frame so canvas surface has valid content immediately
+      // 10. Create capture stream on the fresh canvas FIRST before drawing
+      const canvasStream = recordCanvas.captureStream(30);
+      const videoTrack = canvasStream.getVideoTracks()[0];
+
+      // Pre-draw initial frame
       recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
       recCtx.save();
       drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
       recCtx.clip();
-      try { recCtx.drawImage(videoEl, vx, vy, vw, vh); } catch (e) {}
+      try { recCtx.drawImage(activeVideo, vx, vy, vw, vh); } catch (e) {}
       recCtx.restore();
 
-      // 10. Start video playback from beginning
+      // 11. Start video playback from beginning
       const origPaused = videoEl.paused;
       const origMuted = videoEl.muted;
       try {
@@ -2333,32 +2377,28 @@
         playAttempts++;
       }
 
-      // 9. Determine target cycle duration
-      const vDur = videoEl.duration;
+      // Determine target cycle duration
       let targetDuration = 10;
-      if (Number.isFinite(vDur) && vDur > 0.4) {
-        if (vDur < 2.0) {
-          targetDuration = vDur * 2; // Short GIF: 2 full loops
-        } else if (vDur <= 45) {
-          targetDuration = vDur;     // 1 full cycle
+      const effDur = activeVideo.duration || vDur;
+      if (Number.isFinite(effDur) && effDur > 0.4) {
+        if (effDur < 2.0) {
+          targetDuration = effDur * 2; // Short GIF: 2 full loops
+        } else if (effDur <= 45) {
+          targetDuration = effDur;     // 1 full cycle
         } else {
-          targetDuration = 30;       // Safety cap for long videos
+          targetDuration = 30;         // Safety cap for long videos
         }
       }
 
-      // 10. Setup MediaRecorder with Audio support
-      const canvasStream = recordCanvas.captureStream(30);
-      const videoTrack = canvasStream.getVideoTracks()[0];
       let recordStream = canvasStream;
       let hasAudio = false;
 
       // Only attempt to attach audio for real videos with sound (never for GIFs, short loops, or muted posts)
-      const isGifLike = !vDur || vDur < 3.5 || videoEl.loop || videoEl.muted || origMuted;
       if (!isGifLike) {
         try {
-          const vStream = typeof videoEl.captureStream === 'function'
-            ? videoEl.captureStream()
-            : (typeof videoEl.mozCaptureStream === 'function' ? videoEl.mozCaptureStream() : null);
+          const vStream = typeof activeVideo.captureStream === 'function'
+            ? activeVideo.captureStream()
+            : (typeof activeVideo.mozCaptureStream === 'function' ? activeVideo.mozCaptureStream() : null);
           if (vStream) {
             const aTracks = vStream.getAudioTracks();
             if (aTracks && aTracks.length > 0 && aTracks[0].readyState === 'live') {
@@ -2503,7 +2543,7 @@
           drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
           recCtx.clip();
           try {
-            recCtx.drawImage(videoEl, vx, vy, vw, vh);
+            recCtx.drawImage(activeVideo, vx, vy, vw, vh);
           } catch (err) {
             lastDrawError = err?.message || String(err);
           }
@@ -2554,10 +2594,10 @@
           });
         }
 
-        const curVTime = videoEl.currentTime;
-        const loopedBack = (lastVTime > 1.0 && curVTime < 0.3 && elapsedSec >= (vDur ? vDur * 0.9 : 2.0));
+        const curVTime = activeVideo.currentTime || videoEl.currentTime || 0;
+        const loopedBack = (lastVTime > 1.0 && curVTime < 0.3 && elapsedSec >= (effDur ? effDur * 0.9 : 2.0));
         const reachedTarget = elapsedSec >= targetDuration;
-        const ended = videoEl.ended;
+        const ended = activeVideo.ended || videoEl.ended;
 
         if (reachedTarget || ended || loopedBack) {
           stopRecording();
@@ -2787,6 +2827,14 @@
       if (recordCanvas && recordCanvas.parentNode) {
         try { recordCanvas.parentNode.removeChild(recordCanvas); } catch (e) {}
         recordCanvas = null;
+      }
+      if (cleanVideoEl) {
+        try {
+          cleanVideoEl.pause();
+          cleanVideoEl.removeAttribute('src');
+          cleanVideoEl.load();
+        } catch (e) {}
+        cleanVideoEl = null;
       }
       window.scrollTo({ left: originalScrollX, top: originalScrollY, behavior: 'instant' });
     }

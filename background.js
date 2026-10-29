@@ -57,6 +57,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     forwardToPythonConverter(message, sendResponse);
     return true;
   }
+
+  if (message.action === 'getTweetMediaVideo') {
+    handleGetTweetMediaVideo(message.tweetId, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'fetchVideoBlob') {
+    handleFetchVideoBlob(message.url, sendResponse);
+    return true;
+  }
 });
 
 async function handleCaptureVisibleTab(sender, sendResponse) {
@@ -165,6 +175,86 @@ async function forwardToPythonStitcher(message, sendResponse) {
     sendResponse({ success: true, dataUrl: data.dataUrl, filepath: data.filepath });
   } catch (err) {
     console.error('[Screenshoter] Python stitcher error:', err);
+    sendResponse({ success: false, error: err.message });
+  }
+}
+
+async function handleGetTweetMediaVideo(tweetId, sendResponse) {
+  if (!tweetId) {
+    sendResponse({ success: false, error: 'No tweetId provided' });
+    return;
+  }
+
+  // 1. Try Twitter syndication API
+  try {
+    const res = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&token=4`);
+    if (res.ok) {
+      const data = await res.json();
+      const mediaDetails = data.mediaDetails || [];
+      for (const m of mediaDetails) {
+        const vi = m.video_info;
+        if (vi && vi.variants) {
+          const mp4s = vi.variants
+            .filter(v => v.content_type === 'video/mp4')
+            .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+          if (mp4s.length > 0) {
+            sendResponse({
+              success: true,
+              videoUrl: mp4s[0].url,
+              isGif: m.type === 'animated_gif',
+              aspectRatio: vi.aspect_ratio
+            });
+            return;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Screenshoter] Syndication API note:', e);
+  }
+
+  // 2. Fallback to vxtwitter API
+  try {
+    const res = await fetch(`https://api.vxtwitter.com/Twitter/status/${tweetId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.media_URLs && data.media_URLs.length > 0) {
+        const mp4 = data.media_URLs.find(u => u.includes('.mp4')) || data.media_URLs[0];
+        if (mp4) {
+          sendResponse({
+            success: true,
+            videoUrl: mp4,
+            isGif: false
+          });
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Screenshoter] VxTwitter API note:', e);
+  }
+
+  sendResponse({ success: false, error: 'Could not resolve media video URL' });
+}
+
+async function handleFetchVideoBlob(url, sendResponse) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      sendResponse({
+        success: true,
+        dataUrl: reader.result,
+        size: blob.size,
+        mimeType: blob.type || 'video/mp4'
+      });
+    };
+    reader.onerror = () => sendResponse({ success: false, error: 'FileReader failed' });
+    reader.readAsDataURL(blob);
+  } catch (err) {
+    console.warn('[Screenshoter] fetchVideoBlob error:', err);
     sendResponse({ success: false, error: err.message });
   }
 }
