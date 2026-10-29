@@ -2339,11 +2339,32 @@
 
       const activeVideo = cleanVideoEl || videoEl;
 
-      // 9. Setup record canvas with even dimensions and high smoothing quality
-      let recW = baseCanvas.width;
-      let recH = baseCanvas.height;
+      // 9. Setup high-resolution record canvas (Ultra HD 2x default or config.scale)
+      const userScale = Number(config.scale) || 2;
+      const videoScale = Math.max(1, Math.min(2, userScale));
+
+      let recW = Math.round(baseCanvas.width * videoScale);
+      let recH = Math.round(baseCanvas.height * videoScale);
       if (recW % 2 !== 0) recW += 1;
       if (recH % 2 !== 0) recH += 1;
+
+      // Scaled base canvas for background tweet chrome
+      let scaledBaseCanvas = baseCanvas;
+      if (videoScale > 1) {
+        scaledBaseCanvas = document.createElement('canvas');
+        scaledBaseCanvas.width = recW;
+        scaledBaseCanvas.height = recH;
+        const sCtx = scaledBaseCanvas.getContext('2d');
+        sCtx.imageSmoothingEnabled = true;
+        sCtx.imageSmoothingQuality = 'high';
+        sCtx.drawImage(baseCanvas, 0, 0, recW, recH);
+      }
+
+      const drawVx = Math.round(vx * videoScale);
+      const drawVy = Math.round(vy * videoScale);
+      const drawVw = Math.round(vw * videoScale);
+      const drawVh = Math.round(vh * videoScale);
+      const drawRadius = Math.round(scaledRadius * videoScale);
 
       recordCanvas = document.createElement('canvas');
       recordCanvas.width = recW;
@@ -2374,11 +2395,11 @@
       const videoTrack = canvasStream.getVideoTracks()[0];
 
       // Pre-draw initial frame
-      recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
+      recCtx.drawImage(scaledBaseCanvas, 0, 0, recW, recH);
       recCtx.save();
-      drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
+      drawRoundedRectPath(recCtx, drawVx, drawVy, drawVw, drawVh, drawRadius);
       recCtx.clip();
-      try { recCtx.drawImage(activeVideo, vx, vy, vw, vh); } catch (e) {}
+      try { recCtx.drawImage(activeVideo, drawVx, drawVy, drawVw, drawVh); } catch (e) {}
       recCtx.restore();
 
       // 11. Start video playback from beginning
@@ -2460,7 +2481,7 @@
       const chunks = [];
       const recOptions = {
         mimeType,
-        videoBitsPerSecond: 8000000
+        videoBitsPerSecond: 16000000
       };
 
       try {
@@ -2558,14 +2579,14 @@
 
         try {
           // Draw static crisp base
-          recCtx.drawImage(baseCanvas, 0, 0, recW, recH);
+          recCtx.drawImage(scaledBaseCanvas, 0, 0, recW, recH);
 
           // Draw live video frame clipped with rounded corners
           recCtx.save();
-          drawRoundedRectPath(recCtx, vx, vy, vw, vh, scaledRadius);
+          drawRoundedRectPath(recCtx, drawVx, drawVy, drawVw, drawVh, drawRadius);
           recCtx.clip();
           try {
-            recCtx.drawImage(activeVideo, vx, vy, vw, vh);
+            recCtx.drawImage(activeVideo, drawVx, drawVy, drawVw, drawVh);
           } catch (err) {
             lastDrawError = err?.message || String(err);
           }
@@ -2574,7 +2595,7 @@
           if (config.recordSubtitles !== false) {
             const subText = getActiveSubtitleText(videoEl, videoTweet);
             if (subText) {
-              drawSubtitlesOnCanvas(recCtx, subText, vx, vy, vw, vh);
+              drawSubtitlesOnCanvas(recCtx, subText, drawVx, drawVy, drawVw, drawVh);
             }
           }
 
