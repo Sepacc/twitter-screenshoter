@@ -289,6 +289,7 @@ class StitcherHTTPHandler(BaseHTTPRequestHandler):
                     "-i", temp_webm,
                     "-c:v", "libx264",
                     "-r", "60",
+                    "-fps_mode", "cfr",
                     "-crf", "17",
                     "-preset", "fast",
                     "-pix_fmt", "yuv420p",
