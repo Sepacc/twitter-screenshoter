@@ -50,9 +50,8 @@ def package_extension():
 
     chrome_zip = releases_dir / f"twitter-screenshoter-v{version}-chrome.zip"
     firefox_xpi = releases_dir / f"twitter-screenshoter-v{version}-firefox.xpi"
-    firefox_zip = releases_dir / f"twitter-screenshoter-v{version}-firefox.zip"
 
-    target_packages = [chrome_zip, firefox_xpi, firefox_zip]
+    target_packages = [chrome_zip, firefox_xpi]
 
     exclude_dirs = {
         '.git',

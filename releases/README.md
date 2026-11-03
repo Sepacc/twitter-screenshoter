@@ -15,7 +15,6 @@ Standardized distribution packages for **X / Twitter High-Res Post Screenshoter*
   * `twitter-screenshoter-v1.2.0-chrome.zip`: For Google Chrome, Microsoft Edge, Brave, Opera, Vivaldi, and other Chromium-based browsers.
 * **Firefox / Gecko**:
   * `twitter-screenshoter-v1.2.0-firefox.xpi`: For Mozilla Firefox, Zen Browser, Floorp, and Waterfox.
-  * `twitter-screenshoter-v1.2.0-firefox.zip`: Portable zip package for Firefox developer testing or AMO upload.
 
 ### Installation Instructions
 
@@ -27,10 +26,10 @@ Standardized distribution packages for **X / Twitter High-Res Post Screenshoter*
 5. Click **Load unpacked** and select the extracted folder (ensure `manifest.json` is located in the root of the selected directory).
 
 #### Firefox / Zen Browser
-1. Download `twitter-screenshoter-v1.2.0-firefox.xpi` or `twitter-screenshoter-v1.2.0-firefox.zip`.
+1. Download `twitter-screenshoter-v1.2.0-firefox.xpi`.
 2. Open `about:debugging#/runtime/this-firefox` in your browser address bar.
 3. Click **Load Temporary Add-on...**.
-4. Select the `.xpi` or `.zip` archive.
+4. Select `twitter-screenshoter-v1.2.0-firefox.xpi`.
 
 ---
 
@@ -43,7 +42,6 @@ Standardized distribution packages for **X / Twitter High-Res Post Screenshoter*
   * `twitter-screenshoter-v1.2.0-chrome.zip`: Для браузеров Google Chrome, Microsoft Edge, Brave, Opera, Vivaldi и других на базе Chromium.
 * **Firefox / Gecko**:
   * `twitter-screenshoter-v1.2.0-firefox.xpi`: Для браузеров Mozilla Firefox, Zen Browser, Floorp, Waterfox.
-  * `twitter-screenshoter-v1.2.0-firefox.zip`: Zip-архив для отладки в Firefox или загрузки в AMO.
 
 ### Инструкция по установке
 
@@ -55,7 +53,7 @@ Standardized distribution packages for **X / Twitter High-Res Post Screenshoter*
 5. Нажмите **Загрузить распакованное расширение** и укажите распакованную папку.
 
 #### Firefox / Zen Browser
-1. Скачайте `twitter-screenshoter-v1.2.0-firefox.xpi` или `twitter-screenshoter-v1.2.0-firefox.zip`.
+1. Скачайте `twitter-screenshoter-v1.2.0-firefox.xpi`.
 2. Откройте `about:debugging#/runtime/this-firefox` в адресной строке.
 3. Нажмите **Загрузить временное дополнение...**.
-4. Выберите скачанный файл `.xpi` или `.zip`.
+4. Выберите скачанный файл `twitter-screenshoter-v1.2.0-firefox.xpi`.

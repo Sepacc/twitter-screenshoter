@@ -58,8 +58,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "icons/*.png",
-        "feather/*.svg"
+        "icons/*.png"
       ],
       "matches": [
         "https://x.com/*",

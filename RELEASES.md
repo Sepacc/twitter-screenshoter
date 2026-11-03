@@ -55,7 +55,6 @@
   * Clean release packages generated directly into the `releases/` directory:
     * `twitter-screenshoter-v1.2.0-chrome.zip` (for Google Chrome, Brave, Edge, Opera, Vivaldi)
     * `twitter-screenshoter-v1.2.0-firefox.xpi` (for Mozilla Firefox, Zen Browser, Floorp)
-    * `twitter-screenshoter-v1.2.0-firefox.zip` (portable archive for Firefox / AMO upload)
 
 ---
 
@@ -138,7 +137,6 @@
   * Стандартизированная генерация дистрибутивов в каталог `releases/`:
     * `twitter-screenshoter-v1.2.0-chrome.zip` (для Chrome, Brave, Edge, Opera, Vivaldi)
     * `twitter-screenshoter-v1.2.0-firefox.xpi` (для Firefox, Zen Browser, Floorp)
-    * `twitter-screenshoter-v1.2.0-firefox.zip` (портативный архив для Firefox / AMO)
 
 ---
 
