@@ -22,6 +22,25 @@
       </div>
     </header>
 
+    <!-- Quick Actions on active tab -->
+    <section class="section quick-actions-section" id="quick-actions-box">
+      <label class="section-label" data-i18n="quickActionsLabel">Быстрый снимок на странице</label>
+      <div class="quick-actions-grid">
+        <button type="button" class="btn-action" id="btn-quick-single" title="Скриншот открытого / центрального поста">
+          <svg class="feather-inline" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          <span data-i18n="quickSingle">Этот пост</span>
+        </button>
+        <button type="button" class="btn-action" id="btn-quick-thread" title="Скриншот ветки сообщений">
+          <svg class="feather-inline" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          <span data-i18n="quickThread">Вся ветка</span>
+        </button>
+        <button type="button" class="btn-action" id="btn-quick-video" title="Запись видео или GIF из поста">
+          <svg class="feather-inline" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+          <span data-i18n="quickVideo">Видео / GIF</span>
+        </button>
+      </div>
+    </section>
+
     <!-- Resolution Scale -->
     <section class="section">
       <label class="section-label" data-i18n="scaleLabel">Чёткость / Разрешение (Scale)</label>
@@ -200,10 +219,84 @@
       </div>
     </section>
 
+    <!-- Modular Feature Toggles -->
+    <section class="section">
+      <label class="section-label" data-i18n="featuresLabel">Управление функциями и кнопками</label>
+
+      <!-- Hide tweet buttons completely -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="hideTweetButtonsText">Скрыть кнопку расширения у постов</span>
+        <label class="switch">
+          <input type="checkbox" id="hideTweetButtons" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="hint-text" data-i18n="hideTweetButtonsHint">
+        Убирает значок фотоаппарата из интерфейса Twitter. Скриншоты и запись вызываются через верхние кнопки расширения.
+      </div>
+
+      <!-- Force unmute / audio on video -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="forceAudioText">Принудительно включать звук на видео</span>
+        <label class="switch">
+          <input type="checkbox" id="forceAudio" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="hint-text" data-i18n="forceAudioHint">
+        Автоматически включает звук перед записью, если видео воспроизводилось без звука.
+      </div>
+
+      <!-- Video / GIF recording toggle -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="showVideoRecordText">Запись видео и GIF</span>
+        <label class="switch">
+          <input type="checkbox" id="showVideoRecord" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- MP4 conversion toggle -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="enableMp4ConversionText">Конвертация видео в MP4 (H.264)</span>
+        <label class="switch">
+          <input type="checkbox" id="enableMp4Conversion" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Thread count selector toggle -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="showThreadCountText">Выбор количества постов в треде</span>
+        <label class="switch">
+          <input type="checkbox" id="showThreadCount" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Subtitles toggle in menu -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="showSubtitlesToggleText">Галочка субтитров в меню твита</span>
+        <label class="switch">
+          <input type="checkbox" id="showSubtitlesToggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Hide actions toggle in menu -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="showHideActionsToggleText">Галочка скрытия кнопок в меню твита</span>
+        <label class="switch">
+          <input type="checkbox" id="showHideActionsToggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer class="footer">
       <span id="save-indicator" class="save-indicator" data-i18n="savedNotice">Настройки сохранены</span>
-      <span class="version">v1.0.0</span>
+      <span class="version">v1.2.0</span>
     </footer>
   </div>
 

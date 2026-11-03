@@ -58,6 +58,16 @@
       thisPostDescNormal: 'Screenshot this post only',
       entireThread: (n) => `Entire thread ${n > 1 ? `(${n})` : ''}`,
       entireThreadDesc: (n) => n > 1 ? `All ${n} thread messages` : 'Message chain',
+      threadCountTitle: 'Thread posts',
+      threadCountLast: (k) => `Last ${k} posts`,
+      threadCountFirst: (k) => `First ${k} posts`,
+      threadModeLast: 'From end',
+      threadModeFirst: 'From start',
+      threadModeLastHint: 'Capture the most recent posts leading to this tweet',
+      threadModeFirstHint: 'Capture the first posts from the start of the thread',
+      threadModeLastDesc: (k, total) => `Last ${k} of ${total} thread messages`,
+      threadModeFirstDesc: (k, total) => `First ${k} of ${total} thread messages`,
+      toastThreadPartialSuccess: (k) => `Thread (${k} posts) captured!`,
       recordVideoReplyOnly: 'Record video (Reply only)',
       recordVideoReplyOnlyDesc: (fmt) => `Record only this post in ${fmt}`,
       recordVideoThread: 'Record video (with parent post)',
@@ -149,6 +159,16 @@
       thisPostDescNormal: 'Скриншот только этого сообщения',
       entireThread: (n) => `Вся ветка ${n > 1 ? `(${n})` : ''}`,
       entireThreadDesc: (n) => n > 1 ? `Все ${n} сообщ. ветки целиком` : 'Цепочка сообщений',
+      threadCountTitle: 'Сообщений в ветке',
+      threadCountLast: (k) => `Последние ${k} сообщ.`,
+      threadCountFirst: (k) => `Первые ${k} сообщ.`,
+      threadModeLast: 'С конца',
+      threadModeFirst: 'С начала',
+      threadModeLastHint: 'Скриншот последних сообщений до этого твита',
+      threadModeFirstHint: 'Скриншот первых сообщений от начала ветки',
+      threadModeLastDesc: (k, total) => `Последние ${k} из ${total} сообщ. ветки`,
+      threadModeFirstDesc: (k, total) => `Первые ${k} из ${total} сообщ. ветки`,
+      toastThreadPartialSuccess: (k) => `Ветка (${k} сообщ.) сохранена!`,
       recordVideoReplyOnly: 'Запись видео (только ответ)',
       recordVideoReplyOnlyDesc: (fmt) => `Запись только этого поста в ${fmt}`,
       recordVideoThread: 'Запись видео (с постом выше)',
@@ -257,26 +277,88 @@
     autoCopy: true,       // auto-copy PNG to clipboard
     autoDownload: true,   // auto-download PNG file
     pythonPort: 5678,
-    pythonMethod: 'pillow' // 'pillow' or 'ffmpeg'
+    pythonMethod: 'pillow', // 'pillow' or 'ffmpeg'
+    hideTweetButtons: false,
+    forceAudio: true,
+    showVideoRecord: true,
+    enableMp4Conversion: true,
+    showThreadCount: true,
+    showSubtitlesToggle: true,
+    showHideActionsToggle: true
   };
+
+  function applyButtonVisibility() {
+    if (config.hideTweetButtons) {
+      document.body.classList.add('tw-hide-tweet-buttons');
+    } else {
+      document.body.classList.remove('tw-hide-tweet-buttons');
+    }
+  }
 
   // Load config from storage
   chrome.storage.local.get(['twScreenshotSettings'], (res) => {
     if (res && res.twScreenshotSettings) {
       config = { ...config, ...res.twScreenshotSettings };
     }
+    applyButtonVisibility();
   });
 
   // Listen for config changes from popup
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.twScreenshotSettings) {
       config = { ...config, ...changes.twScreenshotSettings.newValue };
+      applyButtonVisibility();
       refreshButtonsVisibility();
     }
   });
 
   // Helper: Sleep
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  // Find best target tweet in viewport for popup quick actions
+  function findBestVisibleTweet() {
+    const match = window.location.pathname.match(/\/status\/(\d+)/);
+    const pageStatusId = match ? match[1] : null;
+    const tweets = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
+    if (tweets.length === 0) return null;
+    if (pageStatusId) {
+      const focal = tweets.find(t => isTargetFocalTweet(t, pageStatusId));
+      if (focal) return focal;
+    }
+    const vCenter = window.innerHeight / 2;
+    let bestTweet = tweets[0];
+    let bestDist = Infinity;
+    for (const t of tweets) {
+      const r = t.getBoundingClientRect();
+      const dist = Math.abs((r.top + r.bottom) / 2 - vCenter);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestTweet = t;
+      }
+    }
+    return bestTweet;
+  }
+
+  // Handle quick capture actions from extension popup
+  chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+    if (req && req.action === 'triggerCapture') {
+      const targetTweet = findBestVisibleTweet();
+      if (!targetTweet) {
+        showToast({ title: t('toastVidNotFound'), subtitle: 'No tweet found in view', error: true, duration: 4000 });
+        sendResponse({ success: false });
+        return true;
+      }
+      if (req.mode === 'single') {
+        captureTweet(targetTweet, isQuoteTweet(targetTweet));
+      } else if (req.mode === 'thread') {
+        captureThread(targetTweet);
+      } else if (req.mode === 'video') {
+        recordTweetVideo(targetTweet, { withThreadContext: false });
+      }
+      sendResponse({ success: true });
+      return true;
+    }
+  });
 
   // Check if tweet is a Quote Tweet
   function isQuoteTweet(tweetEl) {
@@ -535,15 +617,15 @@
 
     if (composer) {
       const threadTweets = allTweets.filter(t => !(t.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_PRECEDING));
-      if (threadTweets.length > 0) return threadTweets.length;
+      if (threadTweets.length > 1) return threadTweets.length;
     }
 
     const match = window.location.pathname.match(/\/status\/(\d+)/);
     const pageStatusId = match ? match[1] : null;
     const focalIdx = allTweets.findIndex(t => isTargetFocalTweet(t, pageStatusId));
-    if (focalIdx >= 0) return focalIdx + 1;
+    if (focalIdx > 0) return focalIdx + 1;
 
-    return allTweets.length;
+    return Math.max(1, allTweets.length);
   }
 
   // Automatically expand all "Show more" ("Показать еще") links
@@ -756,7 +838,7 @@
       tweetIdx = allTweets.findIndex(t => t === currentTweet || t.contains(currentTweet));
     }
     const hasParentTweet = tweetIdx > 0;
-    const count = countThreadTweets();
+    const count = Math.max(countThreadTweets(), tweetIdx + 1);
     const hasOwnVideo = checkTweetHasVideo(currentTweet);
     const parentVideoTweet = findAncestorWithVideo(currentTweet);
     const hasParentVideo = !!parentVideoTweet;
@@ -768,64 +850,66 @@
     menu.setAttribute('role', 'menu');
 
     let videoItemHtml = '';
-    if (hasOwnVideo) {
-      if (hasParentTweet) {
-        const threadTitle = hasParentVideo ? t('recordVideoDual') : t('recordVideoThread');
-        const threadDesc = hasParentVideo ? t('recordVideoDualDesc', formatLabel) : t('recordVideoThreadDesc', formatLabel);
+    if (config.showVideoRecord !== false) {
+      if (hasOwnVideo) {
+        if (hasParentTweet) {
+          const threadTitle = hasParentVideo ? t('recordVideoDual') : t('recordVideoThread');
+          const threadDesc = hasParentVideo ? t('recordVideoDualDesc', formatLabel) : t('recordVideoThreadDesc', formatLabel);
+          videoItemHtml = `
+            <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video">
+              <div class="tw-menu-item-icon tw-icon-video">
+                ${VIDEO_ICON_SVG}
+              </div>
+              <div class="tw-menu-item-text">
+                <div class="tw-menu-item-title">${t('recordVideoReplyOnly')}</div>
+                <div class="tw-menu-item-desc">${t('recordVideoReplyOnlyDesc', formatLabel)}</div>
+              </div>
+            </button>
+            <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video-thread">
+              <div class="tw-menu-item-icon tw-icon-video">
+                ${VIDEO_ICON_SVG}
+              </div>
+              <div class="tw-menu-item-text">
+                <div class="tw-menu-item-title">${threadTitle}</div>
+                <div class="tw-menu-item-desc">${threadDesc}</div>
+              </div>
+            </button>
+          `;
+        } else {
+          videoItemHtml = `
+            <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video">
+              <div class="tw-menu-item-icon tw-icon-video">
+                ${VIDEO_ICON_SVG}
+              </div>
+              <div class="tw-menu-item-text">
+                <div class="tw-menu-item-title">${t('recordVideoGif')}</div>
+                <div class="tw-menu-item-desc">${t('recordVideoGifDesc', formatLabel)}</div>
+              </div>
+            </button>
+          `;
+        }
+      } else if (hasParentVideo) {
         videoItemHtml = `
-          <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video">
+          <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video-with-parent">
             <div class="tw-menu-item-icon tw-icon-video">
               ${VIDEO_ICON_SVG}
             </div>
             <div class="tw-menu-item-text">
-              <div class="tw-menu-item-title">${t('recordVideoReplyOnly')}</div>
-              <div class="tw-menu-item-desc">${t('recordVideoReplyOnlyDesc', formatLabel)}</div>
+              <div class="tw-menu-item-title">${t('recordVideoWithParent')}</div>
+              <div class="tw-menu-item-desc">${t('recordVideoWithParentDesc', formatLabel)}</div>
             </div>
           </button>
-          <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video-thread">
+          <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video-parent-only">
             <div class="tw-menu-item-icon tw-icon-video">
               ${VIDEO_ICON_SVG}
             </div>
             <div class="tw-menu-item-text">
-              <div class="tw-menu-item-title">${threadTitle}</div>
-              <div class="tw-menu-item-desc">${threadDesc}</div>
-            </div>
-          </button>
-        `;
-      } else {
-        videoItemHtml = `
-          <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video">
-            <div class="tw-menu-item-icon tw-icon-video">
-              ${VIDEO_ICON_SVG}
-            </div>
-            <div class="tw-menu-item-text">
-              <div class="tw-menu-item-title">${t('recordVideoGif')}</div>
-              <div class="tw-menu-item-desc">${t('recordVideoGifDesc', formatLabel)}</div>
+              <div class="tw-menu-item-title">${t('parentVideoOnly')}</div>
+              <div class="tw-menu-item-desc">${t('parentVideoOnlyDesc', formatLabel)}</div>
             </div>
           </button>
         `;
       }
-    } else if (hasParentVideo) {
-      videoItemHtml = `
-        <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video-with-parent">
-          <div class="tw-menu-item-icon tw-icon-video">
-            ${VIDEO_ICON_SVG}
-          </div>
-          <div class="tw-menu-item-text">
-            <div class="tw-menu-item-title">${t('recordVideoWithParent')}</div>
-            <div class="tw-menu-item-desc">${t('recordVideoWithParentDesc', formatLabel)}</div>
-          </div>
-        </button>
-        <button type="button" class="tw-screenshot-menu-item" id="tw-opt-video-parent-only">
-          <div class="tw-menu-item-icon tw-icon-video">
-            ${VIDEO_ICON_SVG}
-          </div>
-          <div class="tw-menu-item-text">
-            <div class="tw-menu-item-title">${t('parentVideoOnly')}</div>
-            <div class="tw-menu-item-desc">${t('parentVideoOnlyDesc', formatLabel)}</div>
-          </div>
-        </button>
-      `;
     }
 
     menu.innerHTML = `
@@ -845,15 +929,35 @@
           ${THREAD_ICON_SVG}
         </div>
         <div class="tw-menu-item-text">
-          <div class="tw-menu-item-title">${t('entireThread', count)}</div>
-          <div class="tw-menu-item-desc">${t('entireThreadDesc', count)}</div>
+          <div class="tw-menu-item-title" id="tw-thread-title">${t('entireThread', count)}</div>
+          <div class="tw-menu-item-desc" id="tw-thread-desc">${t('entireThreadDesc', count)}</div>
         </div>
       </button>
 
+      ${(count >= 3 && config.showThreadCount !== false) ? `
+      <div class="tw-menu-thread-wrap">
+        <div class="tw-thread-header">
+          <span class="tw-thread-title-label">${t('threadCountTitle')}</span>
+          <div class="tw-thread-badge-box">
+            <input type="number" id="tw-thread-num" class="tw-thread-num-input" min="2" max="${count}" value="${count}" />
+            <span class="tw-thread-max-label">/ ${count}</span>
+          </div>
+        </div>
+        <div class="tw-thread-slider-box">
+          <input type="range" id="tw-thread-range" min="2" max="${count}" step="1" value="${count}" class="tw-crop-range" />
+          <div class="tw-thread-modes-row">
+            <button type="button" class="tw-thread-mode-btn active" id="tw-btn-mode-last" data-mode="last" title="${t('threadModeLastHint')}">${t('threadModeLast')}</button>
+            <button type="button" class="tw-thread-mode-btn" id="tw-btn-mode-first" data-mode="first" title="${t('threadModeFirstHint')}">${t('threadModeFirst')}</button>
+          </div>
+        </div>
+      </div>
+      ` : ''}
+
       ${videoItemHtml}
 
-      <div class="tw-menu-divider"></div>
+      ${(config.showHideActionsToggle !== false || (hasVideo && config.showSubtitlesToggle !== false)) ? '<div class="tw-menu-divider"></div>' : ''}
 
+      ${config.showHideActionsToggle !== false ? `
       <div class="tw-menu-toggle-wrap">
         <label class="tw-menu-checkbox-label">
           <input type="checkbox" id="tw-chk-hide-actions" ${config.hideActionBar ? 'checked' : ''} />
@@ -863,8 +967,9 @@
           </span>
         </label>
       </div>
+      ` : ''}
 
-      ${hasVideo ? `
+      ${(hasVideo && config.showSubtitlesToggle !== false) ? `
       <div class="tw-menu-toggle-wrap">
         <label class="tw-menu-checkbox-label">
           <input type="checkbox" id="tw-chk-subtitles" ${config.recordSubtitles !== false ? 'checked' : ''} />
@@ -909,11 +1014,96 @@
       captureTweet(currentTweet, isQuote);
     };
 
+    let threadSelectedCount = count;
+    let threadSelectedMode = 'last';
+
+    if (count >= 3 && config.showThreadCount !== false) {
+      const threadTitleEl = menu.querySelector('#tw-thread-title');
+      const threadDescEl = menu.querySelector('#tw-thread-desc');
+      const rangeInput = menu.querySelector('#tw-thread-range');
+      const numInput = menu.querySelector('#tw-thread-num');
+      const btnLast = menu.querySelector('#tw-btn-mode-last');
+      const btnFirst = menu.querySelector('#tw-btn-mode-first');
+
+      const updateThreadUI = () => {
+        if (numInput && Number(numInput.value) !== threadSelectedCount) {
+          numInput.value = threadSelectedCount;
+        }
+        if (rangeInput && Number(rangeInput.value) !== threadSelectedCount) {
+          rangeInput.value = threadSelectedCount;
+        }
+
+        if (threadTitleEl && threadDescEl) {
+          if (threadSelectedCount === count) {
+            threadTitleEl.textContent = t('entireThread', count);
+            threadDescEl.textContent = t('entireThreadDesc', count);
+          } else {
+            if (threadSelectedMode === 'last') {
+              threadTitleEl.textContent = t('threadCountLast', threadSelectedCount);
+              threadDescEl.textContent = t('threadModeLastDesc', threadSelectedCount, count);
+            } else {
+              threadTitleEl.textContent = t('threadCountFirst', threadSelectedCount);
+              threadDescEl.textContent = t('threadModeFirstDesc', threadSelectedCount, count);
+            }
+          }
+        }
+      };
+
+      if (rangeInput) {
+        rangeInput.oninput = (e) => {
+          e.stopPropagation();
+          threadSelectedCount = Math.max(2, Math.min(count, Number(rangeInput.value) || count));
+          updateThreadUI();
+        };
+      }
+
+      if (numInput) {
+        numInput.oninput = (e) => {
+          e.stopPropagation();
+          const val = parseInt(numInput.value, 10);
+          if (!isNaN(val)) {
+            threadSelectedCount = Math.max(2, Math.min(count, val));
+            updateThreadUI();
+          }
+        };
+        numInput.onchange = (e) => {
+          e.stopPropagation();
+          let val = parseInt(numInput.value, 10);
+          if (isNaN(val) || val < 2) val = 2;
+          if (val > count) val = count;
+          threadSelectedCount = val;
+          numInput.value = val;
+          updateThreadUI();
+        };
+        numInput.onclick = (e) => e.stopPropagation();
+      }
+
+      if (btnLast && btnFirst) {
+        btnLast.onclick = (e) => {
+          e.stopPropagation();
+          threadSelectedMode = 'last';
+          btnLast.classList.add('active');
+          btnFirst.classList.remove('active');
+          updateThreadUI();
+        };
+        btnFirst.onclick = (e) => {
+          e.stopPropagation();
+          threadSelectedMode = 'first';
+          btnFirst.classList.add('active');
+          btnLast.classList.remove('active');
+          updateThreadUI();
+        };
+      }
+    }
+
     // Click on Entire Thread option
     menu.querySelector('#tw-opt-thread').onclick = (e) => {
       e.stopPropagation();
       closeActiveMenu();
-      captureThread(currentTweet);
+      captureThread(currentTweet, {
+        targetCount: threadSelectedCount,
+        mode: threadSelectedMode
+      });
     };
 
     // Click on Video Recording options
@@ -1031,9 +1221,12 @@
 
     const btnRect = btn.getBoundingClientRect();
     const menuWidth = 270;
-    let menuHeight = 210;
-    if (hasVideo) menuHeight += 60;
+    let menuHeight = 130;
+    if (hasVideo && config.showVideoRecord !== false) menuHeight += 60;
     if (isQuote) menuHeight += 75;
+    if (count >= 3 && config.showThreadCount !== false) menuHeight += 75;
+    if (config.showHideActionsToggle !== false) menuHeight += 38;
+    if (hasVideo && config.showSubtitlesToggle !== false) menuHeight += 38;
 
     let left = btnRect.left - 10;
     if (left + menuWidth > window.innerWidth - 16) {
@@ -1431,6 +1624,116 @@
     return false;
   }
 
+  // Freeze and unfreeze videos / GIFs during screenshot captures to prevent slicing seams
+  const frozenVideosMap = new WeakMap();
+
+  function freezeSingleVideo(video) {
+    if (!video || !(video instanceof HTMLVideoElement)) return () => {};
+
+    if (frozenVideosMap.has(video)) {
+      const entry = frozenVideosMap.get(video);
+      entry.refCount++;
+      return () => {
+        entry.refCount--;
+        if (entry.refCount <= 0) {
+          entry.restore();
+          frozenVideosMap.delete(video);
+        }
+      };
+    }
+
+    const wasPlaying = !video.paused;
+    const origPlay = video.play;
+    const origPause = video.pause;
+
+    // Suppress pause event propagation so Twitter React components don't see the pause
+    const stopPropagationHandler = (e) => {
+      e.stopImmediatePropagation();
+    };
+
+    video.addEventListener('pause', stopPropagationHandler, true);
+
+    try {
+      origPause.call(video);
+    } catch (e) {}
+
+    // Override play so Twitter's IntersectionObservers cannot restart it
+    video.play = function() {
+      return Promise.resolve();
+    };
+
+    const forcePause = (e) => {
+      e.stopImmediatePropagation();
+      try {
+        if (!video.paused) origPause.call(video);
+      } catch (e) {}
+    };
+
+    video.addEventListener('play', forcePause, true);
+    video.addEventListener('playing', forcePause, true);
+
+    const entry = {
+      refCount: 1,
+      restore: () => {
+        video.removeEventListener('pause', stopPropagationHandler, true);
+        video.removeEventListener('play', forcePause, true);
+        video.removeEventListener('playing', forcePause, true);
+        video.play = origPlay;
+        if (wasPlaying) {
+          try {
+            const p = origPlay.call(video);
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          } catch (e) {}
+        }
+      }
+    };
+
+    frozenVideosMap.set(video, entry);
+
+    return () => {
+      if (frozenVideosMap.has(video)) {
+        const e = frozenVideosMap.get(video);
+        e.refCount--;
+        if (e.refCount <= 0) {
+          e.restore();
+          frozenVideosMap.delete(video);
+        }
+      }
+    };
+  }
+
+  function freezeVideosInContainer(container) {
+    if (!container) return () => {};
+    const videos = Array.from(container.querySelectorAll('video'));
+    const restores = videos.map(v => freezeSingleVideo(v));
+    return () => {
+      for (const r of restores) {
+        try { r(); } catch (e) {}
+      }
+    };
+  }
+
+  async function prepareAndFreezeVideos(container) {
+    if (!container) return () => {};
+    const videos = Array.from(container.querySelectorAll('video'));
+    for (const v of videos) {
+      if (v.readyState < 2) {
+        await new Promise((resolve) => {
+          const tm = setTimeout(resolve, 200);
+          const onReady = () => {
+            clearTimeout(tm);
+            v.removeEventListener('loadeddata', onReady);
+            v.removeEventListener('canplay', onReady);
+            resolve();
+          };
+          v.addEventListener('loadeddata', onReady, { once: true });
+          v.addEventListener('canplay', onReady, { once: true });
+        });
+      }
+    }
+    return freezeVideosInContainer(container);
+  }
+
   // Helper to remove sticky headers, back button, "Relevant", "View quotes", reply boxes
   function preparePageForCapture(tweetEl) {
     const restores = [];
@@ -1631,6 +1934,10 @@
     };
 
     try {
+      // Freeze any playing videos / GIFs in tweetEl so that slicing does not capture different timeline frames
+      const unfreezeTweetVideos = await prepareAndFreezeVideos(tweetEl);
+      localRestores.push(unfreezeTweetVideos);
+
       // If quote crop is active and post is a quote/has a quote card, apply crop
       if (isQuote && config.quoteCrop && config.quoteCrop !== '100') {
         const restoreCrop = applyQuoteCrop(tweetEl, config.quoteCrop);
@@ -1878,24 +2185,31 @@
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+    // Lock base horizontal coordinates to the first slice to guarantee 0px horizontal drift/seam
+    const baseRectLeft = slices[0].rectLeft;
+    const baseRectWidth = slices[0].rectWidth;
+    const sx = Math.max(0, Math.round(baseRectLeft * scaleX));
+    const sw = Math.min(Math.round(baseRectWidth * scaleX), imgW - sx);
+    const dw = Math.min(sw, canvasWidth);
+
+    let nextCanvasY = 0;
+
     for (let i = 0; i < slices.length; i++) {
       const slice = slices[i];
       const img = (i === 0) ? firstImg : await loadImage(slice.dataUrl);
       const curImgW = img.naturalWidth || img.width;
       const curImgH = img.naturalHeight || img.height;
 
-      const sx = Math.max(0, Math.round(slice.rectLeft * scaleX));
       const sy = Math.max(0, Math.round(slice.sliceTop * scaleY));
-      const sw = Math.min(Math.round(slice.rectWidth * scaleX), curImgW - sx);
       const sh = Math.min(Math.round(slice.visibleH * scaleY), curImgH - sy);
 
-      const dx = 0;
-      const dy = Math.round(slice.destY * scaleY);
-      const dw = Math.min(sw, canvasWidth - dx);
+      // Continuous vertical placement with subpixel alignment
+      const dy = Math.max(nextCanvasY, Math.round(slice.destY * scaleY));
       const dh = Math.min(sh, canvasHeight - dy);
 
-      if (sw > 0 && sh > 0 && dw > 0 && dh > 0) {
-        ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+      if (sw > 0 && dh > 0 && dw > 0) {
+        ctx.drawImage(img, sx, sy, dw, dh, 0, dy, dw, dh);
+        nextCanvasY = dy + dh;
       }
     }
 
@@ -2159,6 +2473,24 @@
       }
     } catch (e) {}
 
+    // Forced audio unmuting if enabled in extension settings
+    const shouldForceAudio = config.forceAudio !== false;
+    if (shouldForceAudio) {
+      for (const mt of mediaTweetsInThread) {
+        const v = findTweetVideo(mt);
+        if (v) {
+          try {
+            v.muted = false;
+            v.volume = 1.0;
+          } catch (e) {}
+        }
+        const unmuteBtn = mt.querySelector('button[aria-label*="Unmute"], button[aria-label*="Включить звук"], button[data-testid="video-player-unmute-button"]');
+        if (unmuteBtn) {
+          try { unmuteBtn.click(); } catch (e) {}
+        }
+      }
+    }
+
     const prepToast = showToast({
       title: t('toastPrepRec'),
       subtitle: captureAsThread
@@ -2303,7 +2635,9 @@
         const scaledRadius = Math.round(borderRadius * scale);
 
         const vDur = vEl.duration;
-        const isGifLike = !vDur || vDur < 3.5 || vEl.loop || vEl.muted;
+        const isExplicitGif = !!t.querySelector('[data-testid="videoComponent"] span') &&
+          (t.querySelector('[data-testid="videoComponent"] span').textContent || '').trim().toUpperCase() === 'GIF';
+        const isGifLike = isExplicitGif || (!vDur || (vDur < 3.5 && vEl.loop));
         const isPrimary = (t === primaryTweet) || (mediaTweetsInThread.length === 1);
 
         activeVideoSources.push({
@@ -2366,8 +2700,11 @@
               });
               try { cv.currentTime = vs.videoEl.currentTime || 0; } catch (e) {}
               try { await cv.play(); } catch (e) {}
-              if (vs.isPrimary && !vs.origMuted && !vs.isGifLike) {
-                try { cv.muted = false; } catch (e) {}
+              if (vs.isPrimary && !vs.isGifLike) {
+                const allowUnmute = shouldForceAudio ? true : !vs.origMuted;
+                if (allowUnmute) {
+                  try { cv.muted = false; } catch (e) {}
+                }
               }
               vs.cleanVideoEl = cv;
               vs.activeVideo = cv;
@@ -2504,24 +2841,33 @@
       // Only attempt to attach audio for real videos with sound (never for GIFs, short loops, or muted posts)
       const candidateAudioSources = [primarySource, ...activeVideoSources.filter(s => s !== primarySource)];
       for (const src of candidateAudioSources) {
-        if (!src.isGifLike && !src.origMuted) {
-          try {
-            const vStream = typeof src.activeVideo.captureStream === 'function'
-              ? src.activeVideo.captureStream()
-              : (typeof src.activeVideo.mozCaptureStream === 'function' ? src.activeVideo.mozCaptureStream() : null);
-            if (vStream) {
-              const aTracks = vStream.getAudioTracks();
-              if (aTracks && aTracks.length > 0 && aTracks[0].readyState === 'live') {
-                recordStream = new MediaStream([
-                  ...canvasStream.getVideoTracks(),
-                  aTracks[0]
-                ]);
-                hasAudio = true;
-                break;
+        if (!src.isGifLike) {
+          if (shouldForceAudio) {
+            try {
+              src.activeVideo.muted = false;
+              src.activeVideo.volume = 1.0;
+            } catch (e) {}
+          }
+          const allowAudio = shouldForceAudio ? true : !src.origMuted;
+          if (allowAudio) {
+            try {
+              const vStream = typeof src.activeVideo.captureStream === 'function'
+                ? src.activeVideo.captureStream()
+                : (typeof src.activeVideo.mozCaptureStream === 'function' ? src.activeVideo.mozCaptureStream() : null);
+              if (vStream) {
+                const aTracks = vStream.getAudioTracks();
+                if (aTracks && aTracks.length > 0 && aTracks[0].readyState === 'live') {
+                  recordStream = new MediaStream([
+                    ...canvasStream.getVideoTracks(),
+                    aTracks[0]
+                  ]);
+                  hasAudio = true;
+                  break;
+                }
               }
+            } catch (e) {
+              console.log('[Screenshoter] Audio track capture note:', e);
             }
-          } catch (e) {
-            console.log('[Screenshoter] Audio track capture note:', e);
           }
         }
       }
@@ -2818,7 +3164,7 @@
 
       // 14. Format handling & MP4 Conversion
       const meta = getTweetMeta(primaryTweet);
-      const isMp4Preferred = (config.videoFormat || 'mp4') === 'mp4';
+      const isMp4Preferred = (config.enableMp4Conversion !== false) && ((config.videoFormat || 'mp4') === 'mp4');
       const filePrefix = captureAsThread ? 'reply-' : '';
       const baseFilename = `${filePrefix}${meta.handle}-${meta.tweetId}-${meta.dateStr}`;
       const mp4Filename = `${baseFilename}.mp4`;
@@ -2989,7 +3335,8 @@
   }
 
   // Main Screenshot Flow: Entire Thread
-  async function captureThread(originTweetEl) {
+  async function captureThread(originTweetEl, options = {}) {
+    const { targetCount = null, mode = 'last' } = (typeof options === 'object' && options !== null) ? options : {};
     const rawScale = Math.max(1, Number(config.scale) || 2);
     const screenWidth = window.screen.width || 1366;
     const maxSafeScale = Math.max(1, Math.floor((screenWidth / 620) * 10) / 10);
@@ -3010,8 +3357,12 @@
     const originalPaddingBottom = document.body.style.paddingBottom;
     const originalMinHeight = document.body.style.minHeight;
     let restoreElements = null;
+    let unfreezeDocumentVideos = null;
 
     try {
+      // Freeze all existing videos across the document so background playback doesn't cause drift or tearing
+      unfreezeDocumentVideos = freezeVideosInContainer(document);
+
       if (scaleFactor > 1) {
         try {
           const zoomRes = await chrome.runtime.sendMessage({ action: 'getZoom' });
@@ -3083,8 +3434,10 @@
         }
 
         // Check if this tweet is the focal/target post of the page
+        const originTweetId = getTweetMeta(originTweetEl)?.tweetId;
+        const isOriginTweet = originTweetEl && (currentTweet === originTweetEl || currentTweet.contains(originTweetEl));
         const isFocal = isTargetFocalTweet(currentTweet, pageStatusId) ||
-                        (originTweetEl && (currentTweet === originTweetEl || currentTweet.contains(originTweetEl)));
+                        (isOriginTweet && (!pageStatusId || originTweetId === pageStatusId));
 
         if (isFocal) {
           reachedFocal = true;
@@ -3105,8 +3458,14 @@
         tweetCanvases.push(singleResult);
         lastCapturedTweet = currentTweet;
 
-        // If we reached focal tweet, check if we should continue (author self-replies)
-        if (reachedFocal) {
+        if (mode === 'first' && targetCount && tweetCanvases.length >= targetCount) {
+          break;
+        }
+
+        // If targetCount is specified and we haven't reached targetCount tweets yet, keep capturing!
+        if (targetCount && tweetCanvases.length < targetCount) {
+          // Continue to next tweet in conversation
+        } else if (reachedFocal) {
           await sleep(80);
           const afterTweets = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
           const curIdx = afterTweets.indexOf(currentTweet);
@@ -3125,13 +3484,22 @@
         }
       }
 
+      let tweetsToStitch = tweetCanvases;
+      if (targetCount && targetCount > 0 && targetCount < tweetCanvases.length) {
+        if (mode === 'first') {
+          tweetsToStitch = tweetCanvases.slice(0, targetCount);
+        } else {
+          tweetsToStitch = tweetCanvases.slice(-targetCount);
+        }
+      }
+
       progressToast.update({
         title: t('toastThreadStitching'),
-        subtitle: t('toastThreadStitchingSub', tweetCanvases.length)
+        subtitle: t('toastThreadStitchingSub', tweetsToStitch.length)
       });
 
       // Direct Canvas stitching
-      const finalResult = await stitchThreadCanvases(tweetCanvases, originTweetEl);
+      const finalResult = await stitchThreadCanvases(tweetsToStitch, originTweetEl);
       const finalDataUrl = finalResult.dataUrl;
       const finalBlob = finalResult.blob;
       const finalWidth = finalResult.width;
@@ -3169,9 +3537,10 @@
       }
 
       // Success toast
+      const isPartial = targetCount && targetCount < tweetCanvases.length;
       showToast({
-        title: copied ? t('toastThreadCopied') : t('toastThreadSuccess'),
-        subtitle: `${finalWidth} × ${finalHeight} px • ${tweetCanvases.length} ${t('msgCount')}`,
+        title: copied ? (isPartial ? t('toastThreadPartialSuccess', tweetsToStitch.length) : t('toastThreadCopied')) : (isPartial ? t('toastThreadPartialSuccess', tweetsToStitch.length) : t('toastThreadSuccess')),
+        subtitle: `${finalWidth} × ${finalHeight} px • ${tweetsToStitch.length} ${t('msgCount')}`,
         success: true,
         thumbUrl: finalDataUrl,
         onCopy: async () => {
@@ -3197,6 +3566,9 @@
         duration: 7000
       });
     } finally {
+      if (unfreezeDocumentVideos) {
+        try { unfreezeDocumentVideos(); } catch (e) {}
+      }
       if (scaleFactor > 1 && originalZoom) {
         try {
           await chrome.runtime.sendMessage({ action: 'setZoom', zoom: originalZoom });
@@ -3214,6 +3586,7 @@
 
   // Inject Screenshot Button with Dropdown Menu Trigger
   function injectButtonIntoTweet(tweetEl) {
+    if (config.hideTweetButtons) return;
     if (!tweetEl || tweetEl.querySelector('.tw-screenshot-btn')) return;
 
     const actionBar = tweetEl.querySelector('div[role="group"]');

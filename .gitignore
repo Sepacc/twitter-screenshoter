@@ -8,6 +8,11 @@ output/
 *.zip
 *.xpi
 
+# Allow release packages
+!releases/
+!releases/*.zip
+!releases/*.xpi
+
 # Allow documentation screenshots and extension icons
 !screenshots/
 !screenshots/*

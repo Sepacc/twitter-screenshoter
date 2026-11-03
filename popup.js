@@ -49,7 +49,21 @@ const TRANSLATIONS = {
     actionsLabel: 'Screenshot Actions',
     autoCopyText: 'Copy screenshot to clipboard',
     autoDownloadText: 'Automatically save file (PNG / MP4)',
-    savedNotice: 'Settings saved'
+    savedNotice: 'Settings saved',
+    quickActionsLabel: 'Quick Capture on Page',
+    quickSingle: 'This Post',
+    quickThread: 'Entire Thread',
+    quickVideo: 'Video / GIF',
+    featuresLabel: 'Feature & Button Controls',
+    hideTweetButtonsText: 'Hide extension button on posts',
+    hideTweetButtonsHint: 'Removes camera icon from tweets. Trigger capture via quick actions above.',
+    forceAudioText: 'Force enable sound on videos',
+    forceAudioHint: 'Automatically unmutes video before recording so audio is not lost.',
+    showVideoRecordText: 'Video and GIF recording',
+    enableMp4ConversionText: 'Convert video to MP4 (H.264)',
+    showThreadCountText: 'Thread post count selector',
+    showSubtitlesToggleText: 'Subtitles checkbox in tweet menu',
+    showHideActionsToggleText: 'Hide actions checkbox in tweet menu'
   },
   ru: {
     subtitle: 'Скриншоты постов, ветки и запись видео/GIF',
@@ -99,7 +113,21 @@ const TRANSLATIONS = {
     actionsLabel: 'Действия при скриншоте',
     autoCopyText: 'Копировать скриншот в буфер обмена',
     autoDownloadText: 'Автоматически сохранять файл (PNG / MP4)',
-    savedNotice: 'Настройки сохранены'
+    savedNotice: 'Настройки сохранены',
+    quickActionsLabel: 'Быстрый снимок на странице',
+    quickSingle: 'Этот пост',
+    quickThread: 'Вся ветка',
+    quickVideo: 'Видео / GIF',
+    featuresLabel: 'Управление функциями и кнопками',
+    hideTweetButtonsText: 'Скрыть кнопку расширения у постов',
+    hideTweetButtonsHint: 'Убирает значок фотоаппарата из интерфейса Twitter. Скриншоты вызываются через верхние кнопки расширения.',
+    forceAudioText: 'Принудительно включать звук на видео',
+    forceAudioHint: 'Автоматически включает звук перед записью, если видео воспроизводилось без звука.',
+    showVideoRecordText: 'Запись видео и GIF',
+    enableMp4ConversionText: 'Конвертация видео в MP4 (H.264)',
+    showThreadCountText: 'Выбор количества постов в треде',
+    showSubtitlesToggleText: 'Галочка субтитров в меню твита',
+    showHideActionsToggleText: 'Галочка скрытия кнопок в меню твита'
   }
 };
 
@@ -122,6 +150,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveIndicator = document.getElementById('save-indicator');
   const langButtons = document.querySelectorAll('.lang-btn');
 
+  const hideTweetButtonsCheckbox = document.getElementById('hideTweetButtons');
+  const forceAudioCheckbox = document.getElementById('forceAudio');
+  const showVideoRecordCheckbox = document.getElementById('showVideoRecord');
+  const enableMp4ConversionCheckbox = document.getElementById('enableMp4Conversion');
+  const showThreadCountCheckbox = document.getElementById('showThreadCount');
+  const showSubtitlesToggleCheckbox = document.getElementById('showSubtitlesToggle');
+  const showHideActionsToggleCheckbox = document.getElementById('showHideActionsToggle');
+
+  const btnQuickSingle = document.getElementById('btn-quick-single');
+  const btnQuickThread = document.getElementById('btn-quick-thread');
+  const btnQuickVideo = document.getElementById('btn-quick-video');
+
   const defaultLang = (navigator.language && navigator.language.startsWith('ru')) ? 'ru' : 'en';
 
   let currentSettings = {
@@ -138,7 +178,14 @@ document.addEventListener('DOMContentLoaded', () => {
     autoCopy: true,
     autoDownload: true,
     pythonPort: 5678,
-    pythonMethod: 'pillow'
+    pythonMethod: 'pillow',
+    hideTweetButtons: false,
+    forceAudio: true,
+    showVideoRecord: true,
+    enableMp4Conversion: true,
+    showThreadCount: true,
+    showSubtitlesToggle: true,
+    showHideActionsToggle: true
   };
 
   function applyLanguage(lang) {
@@ -203,6 +250,28 @@ document.addEventListener('DOMContentLoaded', () => {
     autoCopyCheckbox.checked = !!currentSettings.autoCopy;
     autoDownloadCheckbox.checked = !!currentSettings.autoDownload;
 
+    if (hideTweetButtonsCheckbox) {
+      hideTweetButtonsCheckbox.checked = !!currentSettings.hideTweetButtons;
+    }
+    if (forceAudioCheckbox) {
+      forceAudioCheckbox.checked = currentSettings.forceAudio !== false;
+    }
+    if (showVideoRecordCheckbox) {
+      showVideoRecordCheckbox.checked = currentSettings.showVideoRecord !== false;
+    }
+    if (enableMp4ConversionCheckbox) {
+      enableMp4ConversionCheckbox.checked = currentSettings.enableMp4Conversion !== false;
+    }
+    if (showThreadCountCheckbox) {
+      showThreadCountCheckbox.checked = currentSettings.showThreadCount !== false;
+    }
+    if (showSubtitlesToggleCheckbox) {
+      showSubtitlesToggleCheckbox.checked = currentSettings.showSubtitlesToggle !== false;
+    }
+    if (showHideActionsToggleCheckbox) {
+      showHideActionsToggleCheckbox.checked = currentSettings.showHideActionsToggle !== false;
+    }
+
     updatePythonBoxVisibility();
     if (currentSettings.engine === 'python') {
       checkPythonStatus();
@@ -259,6 +328,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     currentSettings.autoCopy = autoCopyCheckbox.checked;
     currentSettings.autoDownload = autoDownloadCheckbox.checked;
+
+    if (hideTweetButtonsCheckbox) {
+      currentSettings.hideTweetButtons = hideTweetButtonsCheckbox.checked;
+    }
+    if (forceAudioCheckbox) {
+      currentSettings.forceAudio = forceAudioCheckbox.checked;
+    }
+    if (showVideoRecordCheckbox) {
+      currentSettings.showVideoRecord = showVideoRecordCheckbox.checked;
+    }
+    if (enableMp4ConversionCheckbox) {
+      currentSettings.enableMp4Conversion = enableMp4ConversionCheckbox.checked;
+    }
+    if (showThreadCountCheckbox) {
+      currentSettings.showThreadCount = showThreadCountCheckbox.checked;
+    }
+    if (showSubtitlesToggleCheckbox) {
+      currentSettings.showSubtitlesToggle = showSubtitlesToggleCheckbox.checked;
+    }
+    if (showHideActionsToggleCheckbox) {
+      currentSettings.showHideActionsToggle = showHideActionsToggleCheckbox.checked;
+    }
 
     chrome.storage.local.set({ twScreenshotSettings: currentSettings }, () => {
       showSaved();
@@ -321,6 +412,27 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   autoCopyCheckbox.addEventListener('change', saveSettings);
   autoDownloadCheckbox.addEventListener('change', saveSettings);
+
+  if (hideTweetButtonsCheckbox) hideTweetButtonsCheckbox.addEventListener('change', saveSettings);
+  if (forceAudioCheckbox) forceAudioCheckbox.addEventListener('change', saveSettings);
+  if (showVideoRecordCheckbox) showVideoRecordCheckbox.addEventListener('change', saveSettings);
+  if (enableMp4ConversionCheckbox) enableMp4ConversionCheckbox.addEventListener('change', saveSettings);
+  if (showThreadCountCheckbox) showThreadCountCheckbox.addEventListener('change', saveSettings);
+  if (showSubtitlesToggleCheckbox) showSubtitlesToggleCheckbox.addEventListener('change', saveSettings);
+  if (showHideActionsToggleCheckbox) showHideActionsToggleCheckbox.addEventListener('change', saveSettings);
+
+  function sendQuickAction(mode) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs || !tabs[0] || !tabs[0].id) return;
+      chrome.tabs.sendMessage(tabs[0].id, { action: 'triggerCapture', mode }, () => {
+        window.close();
+      });
+    });
+  }
+
+  if (btnQuickSingle) btnQuickSingle.addEventListener('click', () => sendQuickAction('single'));
+  if (btnQuickThread) btnQuickThread.addEventListener('click', () => sendQuickAction('thread'));
+  if (btnQuickVideo) btnQuickVideo.addEventListener('click', () => sendQuickAction('video'));
 
   btnRecheckPy.addEventListener('click', checkPythonStatus);
 });
