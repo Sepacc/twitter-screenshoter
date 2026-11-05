@@ -792,6 +792,36 @@
     return best || vEl;
   }
 
+  // Find the bordered card enclosing the video (quote card or video component card)
+  function findBorderedCard(vEl, tweetEl) {
+    if (!vEl) return null;
+    let cur = vEl.parentElement;
+    let quoteCard = null;
+    let videoComp = null;
+    while (cur && (!tweetEl || cur !== tweetEl)) {
+      if (!videoComp && (cur.getAttribute('data-testid') === 'videoComponent' || cur.getAttribute('data-testid') === 'videoPlayer')) {
+        videoComp = cur;
+      }
+      if (cur.getAttribute('data-testid') === 'quoteTweetCard' ||
+          (cur.getAttribute('role') === 'link' && cur.querySelector && cur.querySelector('[data-testid="User-Name"]'))) {
+        quoteCard = cur;
+        break;
+      }
+      const cs = window.getComputedStyle(cur);
+      const bl = parseFloat(cs.borderLeftWidth) || 0;
+      const br = parseFloat(cs.borderRightWidth) || 0;
+      if (bl > 0 && br > 0 && parseFloat(cs.borderRadius) > 0) {
+        if (!quoteCard && cur.querySelector && cur.querySelector('[data-testid="User-Name"]')) {
+          quoteCard = cur;
+        } else if (!videoComp) {
+          videoComp = cur;
+        }
+      }
+      cur = cur.parentElement;
+    }
+    return quoteCard || videoComp;
+  }
+
   // Ensure video element in tweetEl is mounted and initialized by Twitter's player
   async function ensureTweetVideoMounted(tweetEl) {
     if (!tweetEl) return null;
@@ -2157,19 +2187,59 @@
         const cont = findVideoContainer(v, tweetEl) || v;
         const vRect = cont.getBoundingClientRect();
         if (vRect.width > 10 && vRect.height > 10) {
-          const relX = Math.max(0, vRect.left - rect.left);
-          const relY = Math.max(0, vRect.top - rect.top);
-          const relW = Math.min(rect.width - relX, vRect.width);
-          const relH = vRect.height;
+          const card = findBorderedCard(v, tweetEl);
+          let cardBorderWidth = 0;
+          let cardBorderColor = null;
+          let cardBorderRadius = 14;
+          let cardRect = null;
+
+          if (card) {
+            const cs = window.getComputedStyle(card);
+            cardBorderWidth = parseFloat(cs.borderLeftWidth) || parseFloat(cs.borderWidth) || 1;
+            cardBorderColor = cs.borderLeftColor || cs.borderColor || 'rgb(47, 51, 54)';
+            cardBorderRadius = parseFloat(cs.borderRadius) || 14;
+            cardRect = card.getBoundingClientRect();
+          }
+
+          let relX, relY, relW, relH;
+          if (card && cardRect) {
+            const isQuoteCard = (cardRect.height - vRect.height > 40);
+            const bW = Math.max(1, cardBorderWidth);
+            const leftEdge = Math.max(0, (cardRect.left - rect.left) + bW);
+            const rightEdge = Math.min(rect.width, (cardRect.right - rect.left) - bW);
+            const bottomEdge = Math.min(rect.height, (cardRect.bottom - rect.top) - bW);
+            const topEdge = isQuoteCard
+              ? Math.max(0, vRect.top - rect.top)
+              : Math.max(0, (cardRect.top - rect.top) + bW);
+
+            relX = leftEdge;
+            relY = topEdge;
+            relW = Math.max(10, rightEdge - leftEdge);
+            relH = Math.max(10, bottomEdge - topEdge);
+          } else {
+            relX = Math.max(0, vRect.left - rect.left);
+            relY = Math.max(0, vRect.top - rect.top);
+            relW = Math.min(rect.width - relX, vRect.width);
+            relH = vRect.height;
+          }
+
           const borderRadius = getVideoBorderRadius(cont, v);
           videoSlots.push({
             vEl: v,
             container: cont,
+            card,
             relX,
             relY,
             relW,
             relH,
-            borderRadius
+            borderRadius,
+            cardBorderWidth,
+            cardBorderColor,
+            cardBorderRadius,
+            cardRelX: cardRect ? Math.max(0, cardRect.left - rect.left) : relX,
+            cardRelY: cardRect ? Math.max(0, cardRect.top - rect.top) : relY,
+            cardRelW: cardRect ? Math.min(rect.width, cardRect.width) : relW,
+            cardRelH: cardRect ? cardRect.height : relH
           });
         }
       }
@@ -2757,12 +2827,25 @@
         const slot = (pos.videoSlots || []).find(s => s.vEl === vEl) || (pos.videoSlots || [])[0];
 
         let vx, vy, vw, vh, scaledRadius;
+        let cardX = 0, cardY = 0, cardW = 0, cardH = 0;
+        let cardBorderColor = null, cardBorderWidth = 1, cardBorderRadius = 14;
+
         if (slot) {
           vx = pos.x + Math.max(0, Math.round(slot.relX * pos.scaleX));
           vy = pos.y + Math.max(0, Math.round(slot.relY * pos.scaleY));
           vw = Math.min(pos.width - (vx - pos.x), Math.round(slot.relW * pos.scaleX));
           vh = Math.round(slot.relH * pos.scaleY);
           scaledRadius = Math.round(slot.borderRadius * pos.scaleX);
+
+          if (slot.cardBorderColor) {
+            cardBorderColor = slot.cardBorderColor;
+            cardBorderWidth = Math.max(1, Math.round((slot.cardBorderWidth || 1) * pos.scaleX));
+            cardBorderRadius = Math.round((slot.cardBorderRadius || 14) * pos.scaleX);
+            cardX = pos.x + Math.max(0, Math.round(slot.cardRelX * pos.scaleX));
+            cardY = pos.y + Math.max(0, Math.round(slot.cardRelY * pos.scaleY));
+            cardW = Math.min(pos.width - (cardX - pos.x), Math.round(slot.cardRelW * pos.scaleX));
+            cardH = Math.round(slot.cardRelH * pos.scaleY);
+          }
         } else {
           const container = findVideoContainer(vEl, t) || vEl;
           const hostRect = t.getBoundingClientRect();
@@ -2811,6 +2894,8 @@
           cleanVideoEl: null,
           activeVideo: vEl,
           vx, vy, vw, vh, scaledRadius,
+          cardX, cardY, cardW, cardH,
+          cardBorderColor, cardBorderWidth, cardBorderRadius,
           objectFit,
           isGifLike,
           isPrimary,
@@ -2898,13 +2983,7 @@
       const userScale = Number(config.scale) || 2;
       const videoScale = Math.max(1, Math.min(2, userScale));
 
-      let targetW = baseCanvas.width;
-      // Normalize standard Twitter primaryColumn width (~585px - 618px) to canonical 600px
-      if (targetW >= 585 && targetW <= 618) {
-        targetW = 600;
-      }
-
-      let recW = Math.round(targetW * videoScale);
+      let recW = Math.round(baseCanvas.width * videoScale);
       let recH = Math.round(baseCanvas.height * videoScale);
       if (recW % 2 !== 0) recW += 1;
       if (recH % 2 !== 0) recH += 1;
@@ -2937,6 +3016,21 @@
         sCtx.fillStyle = '#000000';
         sCtx.fillRect(drawVx, drawVy, drawVw, drawVh);
         sCtx.restore();
+
+        // Re-stroke card border if present to guarantee it is always on top and unbroken
+        if (vs.cardBorderColor && vs.cardW > 0) {
+          const cX = Math.round(vs.cardX * scaleRatioX);
+          const cY = Math.round(vs.cardY * scaleRatioY);
+          const cW = Math.round(vs.cardW * scaleRatioX);
+          const cH = Math.round(vs.cardH * scaleRatioY);
+          const cR = Math.round(vs.cardBorderRadius * scaleRatioX);
+          sCtx.save();
+          sCtx.strokeStyle = vs.cardBorderColor;
+          sCtx.lineWidth = Math.max(1, Math.round(vs.cardBorderWidth * scaleRatioX));
+          drawRoundedRectPath(sCtx, cX, cY, cW, cH, cR);
+          sCtx.stroke();
+          sCtx.restore();
+        }
       }
 
       recordCanvas = document.createElement('canvas');
@@ -2983,6 +3077,21 @@
           drawVideoAspectFit(recCtx, vs.activeVideo, drawVx, drawVy, drawVw, drawVh, vs.objectFit || 'contain', vs);
         } catch (e) {}
         recCtx.restore();
+
+        // Re-stroke card border if present to guarantee it is always on top and unbroken
+        if (vs.cardBorderColor && vs.cardW > 0) {
+          const cX = Math.round(vs.cardX * scaleRatioX);
+          const cY = Math.round(vs.cardY * scaleRatioY);
+          const cW = Math.round(vs.cardW * scaleRatioX);
+          const cH = Math.round(vs.cardH * scaleRatioY);
+          const cR = Math.round(vs.cardBorderRadius * scaleRatioX);
+          recCtx.save();
+          recCtx.strokeStyle = vs.cardBorderColor;
+          recCtx.lineWidth = Math.max(1, Math.round(vs.cardBorderWidth * scaleRatioX));
+          drawRoundedRectPath(recCtx, cX, cY, cW, cH, cR);
+          recCtx.stroke();
+          recCtx.restore();
+        }
       }
 
       // 10. Start video playback for all active sources
@@ -3222,6 +3331,21 @@
             }
 
             recCtx.restore();
+
+            // Re-stroke card border if present to guarantee it is always on top and unbroken
+            if (vs.cardBorderColor && vs.cardW > 0) {
+              const cX = Math.round(vs.cardX * scaleRatioX);
+              const cY = Math.round(vs.cardY * scaleRatioY);
+              const cW = Math.round(vs.cardW * scaleRatioX);
+              const cH = Math.round(vs.cardH * scaleRatioY);
+              const cR = Math.round(vs.cardBorderRadius * scaleRatioX);
+              recCtx.save();
+              recCtx.strokeStyle = vs.cardBorderColor;
+              recCtx.lineWidth = Math.max(1, Math.round(vs.cardBorderWidth * scaleRatioX));
+              drawRoundedRectPath(recCtx, cX, cY, cW, cH, cR);
+              recCtx.stroke();
+              recCtx.restore();
+            }
           }
 
           // Sub-perceptible micro-pixel flip guarantees Gecko WebRender marks canvas dirty on every tick
