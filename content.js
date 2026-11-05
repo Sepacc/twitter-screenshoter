@@ -1419,6 +1419,77 @@
     ctx.closePath();
   }
 
+  // Draw video onto canvas respecting aspect ratio (contain / cover) with black letterbox/pillarbox
+  function drawVideoAspectFit(ctx, video, boxX, boxY, boxW, boxH, objectFit = 'contain', vs = null) {
+    if (!video) return;
+
+    let vW = video.videoWidth || (video.naturalWidth || 0);
+    let vH = video.videoHeight || (video.naturalHeight || 0);
+
+    // Fallback to original page video element dimensions if activeVideo hasn't loaded metadata yet
+    if ((!vW || !vH) && vs && vs.videoEl) {
+      vW = vs.videoEl.videoWidth || 0;
+      vH = vs.videoEl.videoHeight || 0;
+    }
+
+    if (!vW || !vH || boxW <= 0 || boxH <= 0) {
+      try {
+        ctx.drawImage(video, boxX, boxY, boxW, boxH);
+      } catch (e) {}
+      return;
+    }
+
+    const fit = (objectFit === 'cover') ? 'cover' : 'contain';
+
+    if (fit === 'cover') {
+      const videoRatio = vW / vH;
+      const boxRatio = boxW / boxH;
+      let sx = 0, sy = 0, sw = vW, sh = vH;
+      if (videoRatio > boxRatio) {
+        // Video is wider than box -> crop horizontal edges from center
+        sw = Math.round(vH * boxRatio);
+        sx = Math.round((vW - sw) / 2);
+      } else if (videoRatio < boxRatio) {
+        // Video is taller than box -> crop vertical edges from center
+        sh = Math.round(vW / boxRatio);
+        sy = Math.round((vH - sh) / 2);
+      }
+      try {
+        ctx.drawImage(video, sx, sy, sw, sh, boxX, boxY, boxW, boxH);
+      } catch (e) {}
+    } else {
+      // Default: contain (maintain natural aspect ratio with letterbox/pillarbox)
+      const videoRatio = vW / vH;
+      const boxRatio = boxW / boxH;
+      let renderW = boxW;
+      let renderH = boxH;
+      let renderX = boxX;
+      let renderY = boxY;
+
+      if (videoRatio > boxRatio) {
+        // Video is wider than box: fit width, center vertically with top/bottom letterbox
+        renderW = boxW;
+        renderH = Math.round(boxW / videoRatio);
+        renderX = boxX;
+        renderY = boxY + Math.round((boxH - renderH) / 2);
+      } else if (videoRatio < boxRatio) {
+        // Video is taller/narrower than box (e.g. 9:16 vertical video): fit height, center horizontally with left/right pillarbox
+        renderH = boxH;
+        renderW = Math.round(boxH * videoRatio);
+        renderX = boxX + Math.round((boxW - renderW) / 2);
+        renderY = boxY;
+      }
+
+      // Fill player background with black for letterbox/pillarbox bars
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+
+      try {
+        ctx.drawImage(video, 0, 0, vW, vH, renderX, renderY, renderW, renderH);
+      } catch (e) {}
+    }
+  }
+
   // Helper to trigger browser download for Data URLs with subfolder & Save As support
   function downloadDataUrl(dataUrl, filename) {
     if (!dataUrl) return;
@@ -2640,6 +2711,22 @@
         const isGifLike = isExplicitGif || (!vDur || (vDur < 3.5 && vEl.loop));
         const isPrimary = (t === primaryTweet) || (mediaTweetsInThread.length === 1);
 
+        let objectFit = 'contain';
+        try {
+          const cs = window.getComputedStyle(vEl);
+          if (cs && cs.objectFit && cs.objectFit !== 'none' && cs.objectFit !== 'fill') {
+            objectFit = cs.objectFit;
+          } else {
+            const playerEl = t.querySelector('[data-testid="videoPlayer"], [data-testid="videoComponent"]') || vEl.parentElement;
+            if (playerEl) {
+              const pcs = window.getComputedStyle(playerEl);
+              if (pcs && pcs.objectFit && pcs.objectFit !== 'none' && pcs.objectFit !== 'fill') {
+                objectFit = pcs.objectFit;
+              }
+            }
+          }
+        } catch (e) {}
+
         activeVideoSources.push({
           tweetEl: t,
           videoEl: vEl,
@@ -2649,6 +2736,7 @@
           cleanVideoEl: null,
           activeVideo: vEl,
           vx, vy, vw, vh, scaledRadius,
+          objectFit,
           isGifLike,
           isPrimary,
           duration: vDur || 0
@@ -2788,7 +2876,9 @@
         recCtx.save();
         drawRoundedRectPath(recCtx, drawVx, drawVy, drawVw, drawVh, drawRadius);
         recCtx.clip();
-        try { recCtx.drawImage(vs.activeVideo, drawVx, drawVy, drawVw, drawVh); } catch (e) {}
+        try {
+          drawVideoAspectFit(recCtx, vs.activeVideo, drawVx, drawVy, drawVw, drawVh, vs.objectFit || 'contain', vs);
+        } catch (e) {}
         recCtx.restore();
       }
 
@@ -3015,7 +3105,7 @@
             drawRoundedRectPath(recCtx, drawVx, drawVy, drawVw, drawVh, drawRadius);
             recCtx.clip();
             try {
-              recCtx.drawImage(vs.activeVideo, drawVx, drawVy, drawVw, drawVh);
+              drawVideoAspectFit(recCtx, vs.activeVideo, drawVx, drawVy, drawVw, drawVh, vs.objectFit || 'contain', vs);
             } catch (err) {
               lastDrawError = err?.message || String(err);
             }
