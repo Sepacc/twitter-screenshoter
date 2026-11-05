@@ -747,6 +747,51 @@
     return null;
   }
 
+  // Get computed or inherited border radius for video container
+  function getVideoBorderRadius(containerEl, vEl) {
+    if (containerEl) {
+      const br = parseFloat(window.getComputedStyle(containerEl).borderRadius);
+      if (br > 0) return br;
+      const inner = containerEl.querySelector('[style*="border-radius"], div');
+      if (inner) {
+        const ibr = parseFloat(window.getComputedStyle(inner).borderRadius);
+        if (ibr > 0) return ibr;
+      }
+    }
+    let cur = vEl;
+    while (cur && cur !== document.body) {
+      const br = parseFloat(window.getComputedStyle(cur).borderRadius);
+      if (br > 0) return br;
+      cur = cur.parentElement;
+    }
+    return 14;
+  }
+
+  // Find the outer video player/component card container in tweet
+  function findVideoContainer(vEl, tweetEl) {
+    if (!vEl) return null;
+    const byTestId = vEl.closest('[data-testid="videoComponent"], [data-testid="videoPlayer"]');
+    if (byTestId && tweetEl && tweetEl.contains(byTestId)) return byTestId;
+    if (tweetEl) {
+      const inTweet = tweetEl.querySelector('[data-testid="videoComponent"], [data-testid="videoPlayer"]');
+      if (inTweet && inTweet.contains(vEl)) return inTweet;
+    }
+    let cur = vEl.parentElement;
+    let best = null;
+    while (cur && (!tweetEl || cur !== tweetEl)) {
+      const rect = cur.getBoundingClientRect();
+      if (rect.width >= 50 && rect.height >= 50) {
+        best = cur;
+        const style = window.getComputedStyle(cur);
+        if (style.overflow === 'hidden' || parseFloat(style.borderRadius) > 0) {
+          return cur;
+        }
+      }
+      cur = cur.parentElement;
+    }
+    return best || vEl;
+  }
+
   // Ensure video element in tweetEl is mounted and initialized by Twitter's player
   async function ensureTweetVideoMounted(tweetEl) {
     if (!tweetEl) return null;
@@ -2105,6 +2150,30 @@
       const rect = tweetEl.getBoundingClientRect();
       const tweetDocTop = window.scrollY + rect.top;
 
+      // Measure video container slots in the exact layout that will be captured
+      const videoSlots = [];
+      const vEls = Array.from(tweetEl.querySelectorAll('video'));
+      for (const v of vEls) {
+        const cont = findVideoContainer(v, tweetEl) || v;
+        const vRect = cont.getBoundingClientRect();
+        if (vRect.width > 10 && vRect.height > 10) {
+          const relX = Math.max(0, vRect.left - rect.left);
+          const relY = Math.max(0, vRect.top - rect.top);
+          const relW = Math.min(rect.width - relX, vRect.width);
+          const relH = vRect.height;
+          const borderRadius = getVideoBorderRadius(cont, v);
+          videoSlots.push({
+            vEl: v,
+            container: cont,
+            relX,
+            relY,
+            relW,
+            relH,
+            borderRadius
+          });
+        }
+      }
+
       let bottomY = rect.bottom;
 
       if (!config.hideActionBar) {
@@ -2217,7 +2286,11 @@
         if (capturedUpTo >= totalHeight - 2) break;
       }
 
-      return await stitchSlicesOnCanvas(slices, totalWidth, totalHeight, tweetEl);
+      const stitchResult = await stitchSlicesOnCanvas(slices, totalWidth, totalHeight, tweetEl);
+      return {
+        ...stitchResult,
+        videoSlots
+      };
     } finally {
       for (const r of localRestores) {
         try { r(); } catch (e) {}
@@ -2287,7 +2360,9 @@
     return {
       canvas,
       width: canvasWidth,
-      height: canvasHeight
+      height: canvasHeight,
+      scaleX,
+      scaleY
     };
   }
 
@@ -2641,7 +2716,15 @@
           const t = threadTweets[i];
           const tc = tweetCanvases[i].canvas;
           const tx = Math.max(0, Math.round((baseCanvas.width - tc.width) / 2));
-          tweetCanvasPositions.set(t, { x: tx, y: curY, width: tc.width, height: tc.height });
+          tweetCanvasPositions.set(t, {
+            x: tx,
+            y: curY,
+            width: tc.width,
+            height: tc.height,
+            scaleX: tweetCanvases[i].scaleX || (tc.width / (t.offsetWidth || 1)),
+            scaleY: tweetCanvases[i].scaleY || (tc.height / (t.offsetHeight || 1)),
+            videoSlots: tweetCanvases[i].videoSlots || []
+          });
           curY += tc.height;
         }
       } else {
@@ -2649,61 +2732,53 @@
         await sleep(100);
         const baseResult = await captureSingleTweetCanvas(primaryTweet, isQuoteTweet(primaryTweet));
         baseCanvas = baseResult.canvas;
-        tweetCanvasPositions.set(primaryTweet, { x: 0, y: 0, width: baseCanvas.width, height: baseCanvas.height });
+        tweetCanvasPositions.set(primaryTweet, {
+          x: 0,
+          y: 0,
+          width: baseCanvas.width,
+          height: baseCanvas.height,
+          scaleX: baseResult.scaleX || (baseCanvas.width / (primaryTweet.offsetWidth || 1)),
+          scaleY: baseResult.scaleY || (baseCanvas.height / (primaryTweet.offsetHeight || 1)),
+          videoSlots: baseResult.videoSlots || []
+        });
       }
 
-      // 4. Immediately restore page elements and body size so Twitter layout is completely normal
-      if (restoreElements) {
-        try { restoreElements(); } catch (e) {}
-        restoreElements = null;
-      }
-      document.body.classList.remove('tw-screenshot-capturing');
-      document.body.style.minHeight = originalMinHeight;
-      document.body.style.paddingBottom = originalPaddingBottom;
-
-      // 5. Scroll primary tweet into comfortable view
-      primaryTweet.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
-      await sleep(80);
-
-      // 6. Calculate relative positions and properties of all video elements on baseCanvas
+      // 4. Calculate relative positions and properties of all video elements on baseCanvas
+      // IMPORTANT: Measure BEFORE restoring elements and scrolling so coordinates match baseCanvas perfectly
       for (const t of mediaTweetsInThread) {
         const vEl = findTweetVideo(t);
         if (!vEl) continue;
 
-        const pos = tweetCanvasPositions.get(t) || { x: 0, y: 0, width: baseCanvas.width, height: baseCanvas.height };
-        const hostRect = t.getBoundingClientRect();
-        let videoRect = vEl.getBoundingClientRect();
+        const pos = tweetCanvasPositions.get(t) || {
+          x: 0, y: 0, width: baseCanvas.width, height: baseCanvas.height,
+          scaleX: 1, scaleY: 1, videoSlots: []
+        };
 
-        if (videoRect.width < 10 || videoRect.height < 10) {
-          const container = t.querySelector('[data-testid="videoPlayer"], [data-testid="videoComponent"]') || vEl.parentElement;
-          if (container) {
-            videoRect = container.getBoundingClientRect();
-          }
+        const slot = (pos.videoSlots || []).find(s => s.vEl === vEl) || (pos.videoSlots || [])[0];
+
+        let vx, vy, vw, vh, scaledRadius;
+        if (slot) {
+          vx = pos.x + Math.max(0, Math.round(slot.relX * pos.scaleX));
+          vy = pos.y + Math.max(0, Math.round(slot.relY * pos.scaleY));
+          vw = Math.min(pos.width - (vx - pos.x), Math.round(slot.relW * pos.scaleX));
+          vh = Math.round(slot.relH * pos.scaleY);
+          scaledRadius = Math.round(slot.borderRadius * pos.scaleX);
+        } else {
+          const container = findVideoContainer(vEl, t) || vEl;
+          const hostRect = t.getBoundingClientRect();
+          const vRect = container.getBoundingClientRect();
+          const sX = pos.scaleX || (pos.width / (hostRect.width || 1));
+          const sY = pos.scaleY || sX;
+          const localVx = Math.max(0, Math.round((vRect.left - hostRect.left) * sX));
+          const localVy = Math.max(0, Math.round((vRect.top - hostRect.top) * sY));
+          const localVw = Math.min(pos.width - localVx, Math.round(vRect.width * sX));
+          const localVh = Math.round(vRect.height * sY);
+          vx = pos.x + localVx;
+          vy = pos.y + localVy;
+          vw = localVw;
+          vh = localVh;
+          scaledRadius = Math.round(getVideoBorderRadius(container, vEl) * sX);
         }
-
-        const scale = pos.width / (hostRect.width || 1);
-        const localVx = Math.max(0, Math.round((videoRect.left - hostRect.left) * scale));
-        const localVy = Math.max(0, Math.round((videoRect.top - hostRect.top) * scale));
-        const localVw = Math.min(pos.width - localVx, Math.round(videoRect.width * scale));
-        const localVh = Math.round(videoRect.height * scale);
-
-        const vx = pos.x + localVx;
-        const vy = pos.y + localVy;
-        const vw = localVw;
-        const vh = localVh;
-
-        let borderRadius = 0;
-        let cur = vEl;
-        while (cur && cur !== t) {
-          const br = parseFloat(window.getComputedStyle(cur).borderRadius);
-          if (br > 0) {
-            borderRadius = br;
-            break;
-          }
-          cur = cur.parentElement;
-        }
-        if (!borderRadius) borderRadius = 14;
-        const scaledRadius = Math.round(borderRadius * scale);
 
         const vDur = vEl.duration;
         const isExplicitGif = !!t.querySelector('[data-testid="videoComponent"] span') &&
@@ -2746,6 +2821,19 @@
       if (activeVideoSources.length === 0) {
         throw new Error('No active video elements found in thread');
       }
+
+      // 5. Restore page elements and body size so Twitter layout is completely normal
+      if (restoreElements) {
+        try { restoreElements(); } catch (e) {}
+        restoreElements = null;
+      }
+      document.body.classList.remove('tw-screenshot-capturing');
+      document.body.style.minHeight = originalMinHeight;
+      document.body.style.paddingBottom = originalPaddingBottom;
+
+      // 6. Scroll primary tweet into comfortable view
+      primaryTweet.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+      await sleep(80);
 
       // 7. Concurrently resolve clean direct video URLs via Extension Background to completely eliminate Tainted Canvas
       await Promise.allSettled(activeVideoSources.map(async (vs) => {
@@ -2825,15 +2913,30 @@
       const scaleRatioY = recH / (baseCanvas.height || 1);
 
       // Scaled base canvas for background tweet chrome
-      let scaledBaseCanvas = baseCanvas;
-      if (videoScale > 1 || Math.abs(scaleRatioX - 1) > 0.001 || Math.abs(scaleRatioY - 1) > 0.001) {
-        scaledBaseCanvas = document.createElement('canvas');
-        scaledBaseCanvas.width = recW;
-        scaledBaseCanvas.height = recH;
-        const sCtx = scaledBaseCanvas.getContext('2d');
-        sCtx.imageSmoothingEnabled = true;
-        sCtx.imageSmoothingQuality = 'high';
-        sCtx.drawImage(baseCanvas, 0, 0, recW, recH);
+      // Always create a dedicated canvas and blank out each video slot with solid black
+      // so no static ghost frames, video borders, or subpixel misalignment seams can ever leak through
+      const scaledBaseCanvas = document.createElement('canvas');
+      scaledBaseCanvas.width = recW;
+      scaledBaseCanvas.height = recH;
+      const sCtx = scaledBaseCanvas.getContext('2d');
+      sCtx.imageSmoothingEnabled = true;
+      sCtx.imageSmoothingQuality = 'high';
+      sCtx.drawImage(baseCanvas, 0, 0, recW, recH);
+
+      // Blank out each video container slot on scaledBaseCanvas with solid black
+      for (const vs of activeVideoSources) {
+        const drawVx = Math.round(vs.vx * scaleRatioX);
+        const drawVy = Math.round(vs.vy * scaleRatioY);
+        const drawVw = Math.round(vs.vw * scaleRatioX);
+        const drawVh = Math.round(vs.vh * scaleRatioY);
+        const drawRadius = Math.round(vs.scaledRadius * scaleRatioX);
+
+        sCtx.save();
+        drawRoundedRectPath(sCtx, drawVx, drawVy, drawVw, drawVh, drawRadius);
+        sCtx.clip();
+        sCtx.fillStyle = '#000000';
+        sCtx.fillRect(drawVx, drawVy, drawVw, drawVh);
+        sCtx.restore();
       }
 
       recordCanvas = document.createElement('canvas');
