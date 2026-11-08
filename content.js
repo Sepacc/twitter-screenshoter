@@ -416,6 +416,87 @@
     return null;
   }
 
+  // Helper to determine if a role="group" element is the tweet's genuine action bar
+  // (reply, retweet, like, analytics, bookmark, share), strictly distinguishing it from polls and other controls
+  function isGenuineActionBar(group, quoteCard = null) {
+    if (!group || group.nodeType !== 1) return false;
+    if (quoteCard && quoteCard.contains(group)) return false;
+
+    // Check aria-label for poll indicators
+    const aria = (group.getAttribute('aria-label') || '').toLowerCase();
+    if (aria.includes('poll') || aria.includes('опрос')) return false;
+
+    // Check for radio buttons, checkboxes or poll-specific items
+    if (group.querySelector('[role="radio"], [role="radiogroup"], input[type="radio"], [data-testid*="poll"]')) {
+      return false;
+    }
+
+    // Must contain at least one standard tweet action button
+    const hasActionBtn = group.querySelector(
+      '[data-testid="reply"], [data-testid="like"], [data-testid="unlike"], [data-testid="retweet"], [data-testid="unretweet"], [data-testid="bookmark"], [data-testid="removeBookmark"]'
+    );
+    if (hasActionBtn) return true;
+
+    // Fallback: check buttons with action bar aria-labels
+    const ariaButtons = group.querySelectorAll('button, div[role="button"], a[role="button"]');
+    for (const b of ariaButtons) {
+      const bAria = (b.getAttribute('aria-label') || '').toLowerCase();
+      if (
+        bAria.includes('reply') || bAria.includes('ответить') ||
+        bAria.includes('like') || bAria.includes('нравится') ||
+        bAria.includes('repost') || bAria.includes('retweet') || bAria.includes('ретвит')
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Find the genuine tweet action bar (bottom row with reply, retweet, like, etc.),
+  // strictly excluding polls, quote cards, and other nested groups
+  function findTweetActionBar(tweetEl) {
+    if (!tweetEl) return null;
+    const quoteCard = findQuoteCard(tweetEl);
+
+    // 1. Check all div[role="group"] elements that match genuine action bar criteria
+    const groups = Array.from(tweetEl.querySelectorAll('div[role="group"]'));
+    const candidates = groups.filter(g => isGenuineActionBar(g, quoteCard));
+    if (candidates.length > 0) {
+      // Return the lowest one in the DOM (the outer tweet's action bar)
+      return candidates[candidates.length - 1];
+    }
+
+    // 2. Fallback: find any reply, retweet, or like button in the tweet (not in quote card)
+    // and find its closest role="group" container
+    const actionButtons = tweetEl.querySelectorAll(
+      '[data-testid="reply"], [data-testid="like"], [data-testid="unlike"], [data-testid="retweet"], [data-testid="unretweet"], [data-testid="bookmark"], [data-testid="removeBookmark"]'
+    );
+    for (let i = actionButtons.length - 1; i >= 0; i--) {
+      const btn = actionButtons[i];
+      if (quoteCard && quoteCard.contains(btn)) continue;
+      const grp = btn.closest('div[role="group"]');
+      if (grp && (!quoteCard || !quoteCard.contains(grp))) {
+        return grp;
+      }
+      if (btn.parentElement && (!quoteCard || !quoteCard.contains(btn.parentElement))) {
+        return btn.parentElement;
+      }
+    }
+
+    // 3. Fallback: if data-testid buttons not found, find last group that is not a poll
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const g = groups[i];
+      if (quoteCard && quoteCard.contains(g)) continue;
+      const aria = (g.getAttribute('aria-label') || '').toLowerCase();
+      if (aria.includes('poll') || aria.includes('опрос')) continue;
+      if (g.querySelector('[role="radio"], [role="radiogroup"], input[type="radio"], [data-testid*="poll"]')) continue;
+      return g;
+    }
+
+    return null;
+  }
+
   // Apply height crop to lower quoted post / reply card ('100', '75', '50', or 'text')
   function applyQuoteCrop(tweetEl, mode = '100') {
     if (!tweetEl || mode === '100') return () => {};
@@ -1748,7 +1829,10 @@
   // Helper to identify action bar elements (reply, retweet, like, bookmark, share, etc.)
   function isActionBarElement(el) {
     if (!el) return false;
-    if (el.closest && el.closest('div[role="group"]')) return true;
+    if (el.closest) {
+      const grp = el.closest('div[role="group"]');
+      if (grp && isGenuineActionBar(grp)) return true;
+    }
     const tid = (el.getAttribute && el.getAttribute('data-testid') || '').toLowerCase();
     if (
       tid.includes('retweet') || tid.includes('unretweet') ||
@@ -2092,9 +2176,15 @@
 
       // If hideActionBar is enabled, hide action bar and engagement counters (retweets, quotes, likes)
       if (config.hideActionBar) {
-        const actionBars = tweetEl.querySelectorAll('div[role="group"]');
-        for (const ab of actionBars) {
-          hideLocal(ab);
+        const groups = tweetEl.querySelectorAll('div[role="group"]');
+        for (const ab of groups) {
+          if (isGenuineActionBar(ab, quoteCard)) {
+            hideLocal(ab);
+          }
+        }
+        const genuineAb = findTweetActionBar(tweetEl);
+        if (genuineAb) {
+          hideLocal(genuineAb);
         }
 
         const statLinks = tweetEl.querySelectorAll(
@@ -2248,12 +2338,18 @@
 
       if (!config.hideActionBar) {
         const actionBars = Array.from(tweetEl.querySelectorAll('div[role="group"]')).filter(
-          ab => !ab.__tw_local_hidden && !ab.__tw_hidden && ab.offsetParent !== null && (!quoteCard || !quoteCard.contains(ab))
+          ab => isGenuineActionBar(ab, quoteCard) && !ab.__tw_local_hidden && !ab.__tw_hidden && ab.offsetParent !== null
         );
         if (actionBars.length > 0) {
           const lastAb = actionBars[actionBars.length - 1];
           const abRect = lastAb.getBoundingClientRect();
           bottomY = Math.max(rect.bottom, abRect.bottom + 14);
+        } else {
+          const genuineAb = findTweetActionBar(tweetEl);
+          if (genuineAb && !genuineAb.__tw_local_hidden && !genuineAb.__tw_hidden && genuineAb.offsetParent !== null) {
+            const abRect = genuineAb.getBoundingClientRect();
+            bottomY = Math.max(rect.bottom, abRect.bottom + 14);
+          }
         }
       } else {
         // When hiding action bar, find the lowest visible content element in the tweet
@@ -2264,6 +2360,16 @@
         if (quoteCard && !quoteCard.__tw_local_hidden && !quoteCard.__tw_hidden && quoteCard.offsetParent !== null) {
           const qr = quoteCard.getBoundingClientRect();
           contentBottom = Math.max(contentBottom, qr.bottom + 8);
+        }
+
+        // Check polls or non-action groups so poll options and vote count are not truncated
+        const nonActionGroups = tweetEl.querySelectorAll('div[role="group"], [role="radiogroup"]');
+        for (const grp of nonActionGroups) {
+          if (grp.__tw_local_hidden || grp.__tw_hidden || grp.offsetParent === null) continue;
+          if (quoteCard && quoteCard.contains(grp)) continue;
+          if (isGenuineActionBar(grp, quoteCard)) continue;
+          const grpr = grp.getBoundingClientRect();
+          contentBottom = Math.max(contentBottom, grpr.bottom + 8);
         }
 
         // Check all time elements (quote time and main tweet date/views row)
@@ -3904,10 +4010,19 @@
   // Inject Screenshot Button with Dropdown Menu Trigger
   function injectButtonIntoTweet(tweetEl) {
     if (config.hideTweetButtons) return;
-    if (!tweetEl || tweetEl.querySelector('.tw-screenshot-btn')) return;
+    if (!tweetEl) return;
 
-    const actionBar = tweetEl.querySelector('div[role="group"]');
+    const actionBar = findTweetActionBar(tweetEl);
     if (!actionBar) return;
+
+    const existingBtn = tweetEl.querySelector('.tw-screenshot-btn');
+    if (existingBtn) {
+      if (!actionBar.contains(existingBtn)) {
+        existingBtn.remove();
+      } else {
+        return;
+      }
+    }
 
     const isQuote = isQuoteTweet(tweetEl);
 
@@ -4032,14 +4147,20 @@
     const existingButtons = document.querySelectorAll('.tw-screenshot-btn');
     for (const btn of existingButtons) {
       const tweetEl = btn.closest('article[data-testid="tweet"]');
-      if (tweetEl && (!isEligibleForScreenshotButton(tweetEl) || (config.quotesOnly && !isQuoteTweet(tweetEl)))) {
+      if (tweetEl) {
+        const correctBar = findTweetActionBar(tweetEl);
+        if (!correctBar || !correctBar.contains(btn) || !isEligibleForScreenshotButton(tweetEl) || (config.quotesOnly && !isQuoteTweet(tweetEl))) {
+          btn.remove();
+          continue;
+        }
+      } else if (!isEligibleForScreenshotButton(btn.parentElement)) {
         btn.remove();
-      } else {
-        btn.setAttribute('data-tooltip', t('btnTooltip'));
-        btn.setAttribute('aria-label', t('btnTooltip'));
-        const badge = btn.querySelector('.tw-quote-badge');
-        if (badge) badge.title = t('cropBadgeQuote');
+        continue;
       }
+      btn.setAttribute('data-tooltip', t('btnTooltip'));
+      btn.setAttribute('aria-label', t('btnTooltip'));
+      const badge = btn.querySelector('.tw-quote-badge');
+      if (badge) badge.title = t('cropBadgeQuote');
     }
     scanTweets();
   }
