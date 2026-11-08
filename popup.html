@@ -22,6 +22,36 @@
       </div>
     </header>
 
+    <!-- Top Section: Extension Button Visibility & Behavior -->
+    <section class="section">
+      <label class="section-label" data-i18n="buttonControlLabel">Кнопка расширения у постов</label>
+
+      <!-- Hide tweet buttons completely -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="hideTweetButtonsText">Скрыть кнопку расширения у постов</span>
+        <label class="switch">
+          <input type="checkbox" id="hideTweetButtons" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="hint-text" data-i18n="hideTweetButtonsHint">
+        Убирает значок фотоаппарата из интерфейса Twitter. Скриншоты и запись вызываются через верхние кнопки расширения.
+      </div>
+
+      <!-- Quotes only -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="quotesOnlyText">Показывать кнопку только для цитат</span>
+        <label class="switch">
+          <input type="checkbox" id="quotesOnly" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="hint-text">
+        <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span data-i18n="quotesOnlyHint">Значок расширения появляется только у твитов-цитат. В общей ленте и обычных постах кнопка не отображается.</span>
+      </div>
+    </section>
+
     <!-- Quick Actions on active tab -->
     <section class="section quick-actions-section" id="quick-actions-box">
       <label class="section-label" data-i18n="quickActionsLabel">Быстрый снимок на странице</label>
@@ -41,9 +71,11 @@
       </div>
     </section>
 
-    <!-- Resolution Scale -->
+    <!-- Screenshot Settings -->
     <section class="section">
-      <label class="section-label" data-i18n="scaleLabel">Чёткость / Разрешение (Scale)</label>
+      <label class="section-label" data-i18n="screenshotsLabel">Настройки скриншотов</label>
+
+      <!-- Resolution Scale -->
       <div class="scale-selector">
         <label class="scale-card">
           <input type="radio" name="scale" value="1" />
@@ -70,12 +102,9 @@
         <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
         <span data-i18n="scaleDesc">Применяется к скриншотам и <b>записи видео</b>. Для мониторов <b>1366×768</b> идеален режим <b>2x</b> (~1200px, чёткий текст и интерфейс без мыла). Режим 3x предназначен для экранов FullHD/4K.</span>
       </div>
-    </section>
 
-    <!-- Main Settings -->
-    <section class="section">
-      <label class="section-label" data-i18n="engineLabel">Движок склейки длинных постов</label>
-      <div class="radio-group">
+      <!-- Stitching Engine -->
+      <div class="radio-group" style="margin-top: 6px;">
         <label class="radio-card">
           <input type="radio" name="engine" value="canvas" checked />
           <div class="radio-content">
@@ -102,11 +131,9 @@
         </div>
         <div class="hint-text" id="python-hint" data-i18n="pyHint">Запустите: <code>python stitcher.py --server</code></div>
       </div>
-    </section>
 
-    <section class="section">
-      <label class="section-label" data-i18n="contentLabel">Содержимое скриншота</label>
-      <div class="toggle-row">
+      <!-- Hide Action Bar -->
+      <div class="toggle-row" style="margin-top: 4px;">
         <span class="toggle-text">
           <span data-i18n="hideActionBarText">Скрывать лайки и панель кнопок</span>
           <span class="feather-icons-group">
@@ -124,34 +151,8 @@
       <div class="hint-text" data-i18n="hideActionBarHint">
         Чистый скриншот без кнопок ответа, счетчиков лайков, ретвитов и закладок.
       </div>
-    </section>
 
-    <!-- Video Recording & Subtitles -->
-    <section class="section">
-      <label class="section-label" data-i18n="videoLabel">Запись видео</label>
-      <div class="toggle-row">
-        <span class="toggle-text" data-i18n="videoFormatText">Формат видео</span>
-        <select id="videoFormat" class="settings-select">
-          <option value="mp4" data-i18n="optMp4" selected>MP4 (H.264 / AAC для Telegram)</option>
-          <option value="webm" data-i18n="optWebm">WebM (VP9 / Opus)</option>
-        </select>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-text" data-i18n="recordSubtitlesText">Записывать субтитры на видео</span>
-        <label class="switch">
-          <input type="checkbox" id="recordSubtitles" checked />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="hint-text">
-        <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-        <span data-i18n="videoHint">MP4 (H.264) идеален для Telegram (автовоспроизведение и циклы в чатах). При запуске <code>stitcher.py</code> конвертируется через FFmpeg без потери качества.</span>
-      </div>
-    </section>
-
-    <!-- Quote Tweet / Lower Post Crop -->
-    <section class="section">
-      <label class="section-label" data-i18n="quoteCropLabel">Цитаты (Нижний пост)</label>
+      <!-- Quote Crop -->
       <div class="toggle-row">
         <span class="toggle-text" data-i18n="quoteCropDefault">Высота цитаты по умолчанию</span>
         <select id="quoteCrop" class="settings-select">
@@ -165,45 +166,9 @@
         <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
         <span data-i18n="quoteCropHint">Обрезает нижний пост (цитату), убирая огромные картинки и освобождая место под видео. Также настраивается ползунком прямо в меню твита.</span>
       </div>
-    </section>
 
-    <section class="section">
-      <label class="section-label" data-i18n="folderLabel">Папка и сохранение файлов</label>
-      <div class="folder-input-row">
-        <span class="toggle-text" data-i18n="downloadFolderText">Подпапка в «Загрузках»:</span>
-        <input type="text" id="downloadFolder" class="folder-input" placeholder="Twitter_Media" value="Twitter_Media" />
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-text" data-i18n="alwaysAskPathText">Всегда открывать выбор папки (Save As)</span>
-        <label class="switch">
-          <input type="checkbox" id="alwaysAskSavePath" />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="hint-text">
-        <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-        <span data-i18n="folderHint">Файлы сохраняются в <code>Загрузки/&lt;подпапка&gt;/</code>. Тумблер открывает стандартное окно Windows для выбора любой папки.</span>
-      </div>
-    </section>
-
-    <section class="section">
-      <label class="section-label" data-i18n="buttonVisibilityLabel">Отображение кнопки</label>
-      <div class="toggle-row">
-        <span class="toggle-text" data-i18n="quotesOnlyText">Только если открытый пост — цитата</span>
-        <label class="switch">
-          <input type="checkbox" id="quotesOnly" />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="hint-text">
-        <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-        <span data-i18n="buttonVisibilityHint">Кнопка с меню (<b>Этот пост</b> / <b>Вся ветка</b>) добавляется только на странице открытого поста. В общей ленте и комментариях посторонних пользователей кнопка не отображается.</span>
-      </div>
-    </section>
-
-    <section class="section">
-      <label class="section-label" data-i18n="actionsLabel">Действия при скриншоте</label>
-      <div class="toggle-row">
+      <!-- Actions on capture -->
+      <div class="toggle-row" style="margin-top: 4px;">
         <span class="toggle-text" data-i18n="autoCopyText">Копировать скриншот в буфер обмена</span>
         <label class="switch">
           <input type="checkbox" id="autoCopy" checked />
@@ -219,20 +184,35 @@
       </div>
     </section>
 
-    <!-- Modular Feature Toggles -->
+    <!-- Video & GIF Recording Settings -->
     <section class="section">
-      <label class="section-label" data-i18n="featuresLabel">Управление функциями и кнопками</label>
+      <label class="section-label" data-i18n="videoSettingsLabel">Запись видео и GIF</label>
 
-      <!-- Hide tweet buttons completely -->
+      <!-- Video / GIF recording master toggle -->
       <div class="toggle-row">
-        <span class="toggle-text" data-i18n="hideTweetButtonsText">Скрыть кнопку расширения у постов</span>
+        <span class="toggle-text" data-i18n="showVideoRecordText">Функция записи видео и GIF</span>
         <label class="switch">
-          <input type="checkbox" id="hideTweetButtons" />
+          <input type="checkbox" id="showVideoRecord" checked />
           <span class="slider"></span>
         </label>
       </div>
-      <div class="hint-text" data-i18n="hideTweetButtonsHint">
-        Убирает значок фотоаппарата из интерфейса Twitter. Скриншоты и запись вызываются через верхние кнопки расширения.
+
+      <!-- Format selector -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="videoFormatText">Формат видео</span>
+        <select id="videoFormat" class="settings-select">
+          <option value="mp4" data-i18n="optMp4" selected>MP4 (H.264 / AAC для Telegram)</option>
+          <option value="webm" data-i18n="optWebm">WebM (VP9 / Opus)</option>
+        </select>
+      </div>
+
+      <!-- MP4 conversion toggle -->
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="enableMp4ConversionText">Конвертация видео в MP4 (H.264)</span>
+        <label class="switch">
+          <input type="checkbox" id="enableMp4Conversion" checked />
+          <span class="slider"></span>
+        </label>
       </div>
 
       <!-- Force unmute / audio on video -->
@@ -247,23 +227,23 @@
         Автоматически включает звук перед записью, если видео воспроизводилось без звука.
       </div>
 
-      <!-- Video / GIF recording toggle -->
+      <!-- Subtitles -->
       <div class="toggle-row">
-        <span class="toggle-text" data-i18n="showVideoRecordText">Запись видео и GIF</span>
+        <span class="toggle-text" data-i18n="recordSubtitlesText">Записывать субтитры на видео</span>
         <label class="switch">
-          <input type="checkbox" id="showVideoRecord" checked />
+          <input type="checkbox" id="recordSubtitles" checked />
           <span class="slider"></span>
         </label>
       </div>
+      <div class="hint-text">
+        <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span data-i18n="videoHint">MP4 (H.264) идеален для Telegram (автовоспроизведение и циклы в чатах). При запуске <code>stitcher.py</code> конвертируется через FFmpeg без потери качества.</span>
+      </div>
+    </section>
 
-      <!-- MP4 conversion toggle -->
-      <div class="toggle-row">
-        <span class="toggle-text" data-i18n="enableMp4ConversionText">Конвертация видео в MP4 (H.264)</span>
-        <label class="switch">
-          <input type="checkbox" id="enableMp4Conversion" checked />
-          <span class="slider"></span>
-        </label>
-      </div>
+    <!-- Tweet Menu & Threads Settings -->
+    <section class="section">
+      <label class="section-label" data-i18n="tweetMenuLabel">Меню твита и ветки</label>
 
       <!-- Thread count selector toggle -->
       <div class="toggle-row">
@@ -293,10 +273,30 @@
       </div>
     </section>
 
+    <!-- Folder & File Saving -->
+    <section class="section">
+      <label class="section-label" data-i18n="folderLabel">Папка и сохранение файлов</label>
+      <div class="folder-input-row">
+        <span class="toggle-text" data-i18n="downloadFolderText">Подпапка в «Загрузках»:</span>
+        <input type="text" id="downloadFolder" class="folder-input" placeholder="Twitter_Media" value="Twitter_Media" />
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-text" data-i18n="alwaysAskPathText">Всегда открывать выбор папки (Save As)</span>
+        <label class="switch">
+          <input type="checkbox" id="alwaysAskSavePath" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="hint-text">
+        <svg class="feather-inline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span data-i18n="folderHint">Файлы сохраняются в <code>Загрузки/&lt;подпапка&gt;/</code>. Тумблер открывает стандартное окно Windows для выбора любой папки.</span>
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer class="footer">
       <span id="save-indicator" class="save-indicator" data-i18n="savedNotice">Настройки сохранены</span>
-      <span class="version">v1.2.0</span>
+      <span class="version">v1.2.2</span>
     </footer>
   </div>
 

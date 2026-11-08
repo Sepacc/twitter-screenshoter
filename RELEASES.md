@@ -7,6 +7,31 @@
 <a name="english"></a>
 ## English
 
+### Version 1.2.2 (2026-11-08)
+
+#### Video & GIF Recording Fixes
+* **Vertical Video Aspect Ratio Preservation**:
+  * Fixed an issue where vertical and portrait-oriented videos/GIFs were stretched horizontally during recording. The canvas now accurately respects the natural aspect ratio of the media source.
+* **Tainted Canvas & CORS Resolution**:
+  * Fixed canvas taint errors (`Failed to execute 'getImageData' on 'CanvasRenderingContext2D': The canvas has been tainted by cross-origin data`) when recording tweets containing external media. Video streams and blobs are now fetched via background proxy with dynamic syndication token computation, converting them to data URLs and allowing taint-free recording.
+* **Synchronized Playback Alignment**:
+  * Resolved video overlap, offset positioning, and clipping artifacts when capturing tweets with parent video or GIF content.
+
+#### Screenshot Bounding & Clean Capture
+* **Removal of "Relevant" Dropdown and Reply Box**:
+  * Fixed screenshot boundaries so the trailing "Relevant" sorting dropdown, separator line, and inline reply composer ("Post your reply") are cleanly excluded in both action-bar-visible and action-bar-hidden modes.
+* **Text Reply Capture Fix (Black Screenshot Resolution)**:
+  * Resolved an issue where screenshotting a text reply to an image or media post resulted in a black or empty canvas due to over-aggressive element hiding. The target tweet element and its ancestor tree are now strictly safeguarded.
+* **Poll Option Obstruction Fix**:
+  * Fixed camera button placement on poll posts where the button previously overlapped voting options. The action bar locator now cleanly differentiates poll choices from tweet action bars.
+
+#### Extension Settings & UI Organization
+* **Logical Settings Categorization**:
+  * Completely reorganized the popup settings into clear sections: Extension Button, Quick Actions, Screenshot Settings, Video Recording, Tweet Menu & Threads, and File Saving.
+  * Moved the "Hide camera button on tweets" toggle to the very top for immediate access.
+
+---
+
 ### Version 1.2.0 (2026-11-03)
 
 #### Audio & Video Recording Enhancements
@@ -88,6 +113,31 @@
 
 <a name="русский"></a>
 ## Русский
+
+### Версия 1.2.2 (08.11.2026)
+
+#### Запись видео и GIF
+* **Сохранение пропорций вертикальных видео**:
+  * Устранено искажение и растягивание вертикальных видео и GIF при записи. Холст записи теперь строго сохраняет исходные пропорции медиафайла.
+* **Устранение ошибки Tainted Canvas (CORS)**:
+  * Исправлена ошибка блокировки холста (`The canvas has been tainted by cross-origin data`) при захвате твитов с гифками и видео. Медиаданные теперь загружаются через прокси в фоновом скрипте с расчетом токена синдикации и передаются в виде data URL, что исключает кросс-доменные ограничения.
+* **Синхронизация и позиционирование видео**:
+  * Устранены наложения, полосы и смещения кадров при записи ответов с родительскими видео и GIF.
+
+#### Границы скриншотов и очистка интерфейса
+* **Обрезка выпадающего списка «Relevant» и формы ответа**:
+  * Исправлен расчет нижней границы захвата: переключатель сортировки комментариев «Relevant», разделительная полоса и поле «Ответить» (Post your reply) больше не попадают на скриншот как при включенной, так и при скрытой панели лайков/репостов.
+* **Исправление скриншота текстовых ответов (черный экран)**:
+  * Устранена ошибка, из-за которой скриншот текстового ответа на твит с картинкой давал черный прямоугольник из-за избыточного скрытия элементов. Целевой твит и его родители теперь защищены от скрытия.
+* **Устранение перекрытия опросов**:
+  * Кнопка скриншота больше не перекрывает варианты голосования в опросах благодаря строгому разделению контейнеров опросов и панели действий твита.
+
+#### Организация настроек расширения
+* **Логическая группировка параметров**:
+  * Настройки в попапе структурированы по категориям: кнопка расширения, быстрые действия, скриншоты, запись видео, меню твита и треды, сохранение файлов.
+  * Переключатель скрытия кнопки с постов вынесен наверх для быстрого доступа.
+
+---
 
 ### Версия 1.2.0 (03.11.2026)
 

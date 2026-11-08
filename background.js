@@ -185,9 +185,10 @@ async function handleGetTweetMediaVideo(tweetId, sendResponse) {
     return;
   }
 
-  // 1. Try Twitter syndication API
+  // 1. Try Twitter syndication API with computed token
   try {
-    const res = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&token=4`);
+    const token = ((Number(tweetId) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '');
+    const res = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&token=${token}`);
     if (res.ok) {
       const data = await res.json();
       const mediaDetails = data.mediaDetails || [];
@@ -213,28 +214,35 @@ async function handleGetTweetMediaVideo(tweetId, sendResponse) {
     console.warn('[Screenshoter] Syndication API note:', e);
   }
 
-  // 2. Fallback to vxtwitter API
+  // 1b. Try Twitter syndication API without token as fallback
   try {
-    const res = await fetch(`https://api.vxtwitter.com/Twitter/status/${tweetId}`);
+    const res = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}`);
     if (res.ok) {
       const data = await res.json();
-      if (data && data.media_URLs && data.media_URLs.length > 0) {
-        const mp4 = data.media_URLs.find(u => u.includes('.mp4')) || data.media_URLs[0];
-        if (mp4) {
-          sendResponse({
-            success: true,
-            videoUrl: mp4,
-            isGif: false
-          });
-          return;
+      const mediaDetails = data.mediaDetails || [];
+      for (const m of mediaDetails) {
+        const vi = m.video_info;
+        if (vi && vi.variants) {
+          const mp4s = vi.variants
+            .filter(v => v.content_type === 'video/mp4')
+            .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+          if (mp4s.length > 0) {
+            sendResponse({
+              success: true,
+              videoUrl: mp4s[0].url,
+              isGif: m.type === 'animated_gif',
+              aspectRatio: vi.aspect_ratio
+            });
+            return;
+          }
         }
       }
     }
   } catch (e) {
-    console.warn('[Screenshoter] VxTwitter API note:', e);
+    console.warn('[Screenshoter] Syndication API (no token) note:', e);
   }
 
-  // 3. Fallback to fxtwitter API
+  // 2. Fallback to fxtwitter API
   try {
     const res = await fetch(`https://api.fxtwitter.com/status/${tweetId}`);
     if (res.ok) {
@@ -254,6 +262,49 @@ async function handleGetTweetMediaVideo(tweetId, sendResponse) {
     }
   } catch (e) {
     console.warn('[Screenshoter] FxTwitter API note:', e);
+  }
+
+  // 3. Fallback to fixupx API
+  try {
+    const res = await fetch(`https://api.fixupx.com/status/${tweetId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const media = data?.tweet?.media;
+      if (media?.videos && media.videos.length > 0) {
+        const mp4 = media.videos[0].url;
+        if (mp4) {
+          sendResponse({
+            success: true,
+            videoUrl: mp4,
+            isGif: media.videos[0].type === 'gif'
+          });
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Screenshoter] Fixupx API note:', e);
+  }
+
+  // 4. Fallback to vxtwitter API
+  try {
+    const res = await fetch(`https://api.vxtwitter.com/Twitter/status/${tweetId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.media_URLs && data.media_URLs.length > 0) {
+        const mp4 = data.media_URLs.find(u => u.includes('.mp4')) || data.media_URLs[0];
+        if (mp4) {
+          sendResponse({
+            success: true,
+            videoUrl: mp4,
+            isGif: false
+          });
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Screenshoter] VxTwitter API note:', e);
   }
 
   sendResponse({ success: false, error: 'Could not resolve media video URL' });

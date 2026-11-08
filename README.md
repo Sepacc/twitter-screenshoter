@@ -113,8 +113,8 @@ Saved media files follow a predictable, clean naming format:
 
 #### Pre-built Release Packages (Recommended)
 Pre-packaged archives are located in the [releases/](releases/) folder:
-- **Chrome / Edge / Brave / Chromium**: Download `twitter-screenshoter-v1.2.0-chrome.zip`, unpack into a folder, and load via `chrome://extensions` (Developer mode -> Load unpacked).
-- **Firefox / Zen Browser**: Download `twitter-screenshoter-v1.2.0-firefox.xpi` and load via `about:debugging#/runtime/this-firefox` (Load Temporary Add-on...).
+- **Chrome / Edge / Brave / Chromium**: Download `twitter-screenshoter-v1.2.2-chrome.zip`, unpack into a folder, and load via `chrome://extensions` (Developer mode -> Load unpacked).
+- **Firefox / Zen Browser**: Download `twitter-screenshoter-v1.2.2-firefox.xpi` and load via `about:debugging#/runtime/this-firefox` (Load Temporary Add-on...).
 
 #### Manual Installation from Source
 1. Clone or download this repository:
@@ -135,7 +135,7 @@ Pre-packaged archives are located in the [releases/](releases/) folder:
 ##### Mozilla Firefox / Zen Browser (109+)
 1. Open Firefox or Zen Browser and go to `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on...**.
-3. Select the `manifest.json` file inside the `SCREENSHOTER` folder (or select `releases/twitter-screenshoter-v1.2.0-firefox.xpi`).
+3. Select the `manifest.json` file inside the `SCREENSHOTER` folder (or select `releases/twitter-screenshoter-v1.2.2-firefox.xpi`).
 4. Open or refresh any post on [x.com](https://x.com).
 
 ---
@@ -200,8 +200,8 @@ To package clean extension archives for Chrome and Firefox into `releases/`:
 python package.py
 ```
 This generates:
-- `releases/twitter-screenshoter-v1.2.0-chrome.zip`
-- `releases/twitter-screenshoter-v1.2.0-firefox.xpi`
+- `releases/twitter-screenshoter-v1.2.2-chrome.zip`
+- `releases/twitter-screenshoter-v1.2.2-firefox.xpi`
 
 ---
 
@@ -358,8 +358,8 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 #### Готовые архивы релизов (Рекомендуется)
 Собранные пакеты находятся в папке [releases/](releases/):
-- **Chrome / Edge / Brave / Chromium**: Скачайте `twitter-screenshoter-v1.2.0-chrome.zip`, распакуйте в папку и загрузите через `chrome://extensions` (Режим разработчика -> Загрузить распакованное расширение).
-- **Firefox / Zen Browser**: Скачайте `twitter-screenshoter-v1.2.0-firefox.xpi` и загрузите через `about:debugging#/runtime/this-firefox` (Загрузить временное дополнение...).
+- **Chrome / Edge / Brave / Chromium**: Скачайте `twitter-screenshoter-v1.2.2-chrome.zip`, распакуйте в папку и загрузите через `chrome://extensions` (Режим разработчика -> Загрузить распакованное расширение).
+- **Firefox / Zen Browser**: Скачайте `twitter-screenshoter-v1.2.2-firefox.xpi` и загрузите через `about:debugging#/runtime/this-firefox` (Загрузить временное дополнение...).
 
 #### Установка из исходного кода
 1. Склонируйте или скачайте этот репозиторий:
@@ -380,7 +380,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 ##### Mozilla Firefox / Zen Browser (109+)
 1. Введите в адресной строке Firefox или Zen Browser: `about:debugging#/runtime/this-firefox`
 2. Нажмите кнопку **«Загрузить временное дополнение...»** (Load Temporary Add-on...).
-3. Выберите файл `manifest.json` в папке `SCREENSHOTER` (или выберите архив `releases/twitter-screenshoter-v1.2.0-firefox.xpi`).
+3. Выберите файл `manifest.json` в папке `SCREENSHOTER` (или выберите архив `releases/twitter-screenshoter-v1.2.2-firefox.xpi`).
 4. Откройте или обновите страницу любого поста на [x.com](https://x.com).
 
 ---
@@ -445,8 +445,8 @@ python stitcher.py --input-folder ./slices/ --output full_tweet.png --method ffm
 python package.py
 ```
 Скрипт создаст:
-- `releases/twitter-screenshoter-v1.2.0-chrome.zip`
-- `releases/twitter-screenshoter-v1.2.0-firefox.xpi`
+- `releases/twitter-screenshoter-v1.2.2-chrome.zip`
+- `releases/twitter-screenshoter-v1.2.2-firefox.xpi`
 
 ---
 

@@ -363,11 +363,15 @@
   // Check if tweet is a Quote Tweet
   function isQuoteTweet(tweetEl) {
     if (!tweetEl) return false;
+    if (tweetEl.querySelector('[data-testid="quoteTweetCard"]')) return true;
+
     const userNames = tweetEl.querySelectorAll('[data-testid="User-Name"]');
     if (userNames.length > 1) return true;
 
-    const quoteLink = tweetEl.querySelector('div[role="link"] a[href*="/status/"], div[tabindex="0"][role="link"]');
-    if (quoteLink) return true;
+    const quoteLinks = tweetEl.querySelectorAll('div[role="link"], div[tabindex="0"][role="link"]');
+    for (const ql of quoteLinks) {
+      if (ql.querySelector('[data-testid="User-Name"]')) return true;
+    }
 
     const tweetTexts = tweetEl.querySelectorAll('[data-testid="tweetText"]');
     if (tweetTexts.length > 1) return true;
@@ -379,18 +383,23 @@
   function findQuoteCard(tweetEl) {
     if (!tweetEl) return null;
 
-    // 1. Look for role="link" container that has User-Name or time
-    const roleLinks = tweetEl.querySelectorAll('div[role="link"], div[tabindex="0"][role="link"]');
-    for (const rl of roleLinks) {
-      if (rl.querySelector('[data-testid="User-Name"]') || rl.querySelector('time') || rl.querySelector('a[href*="/status/"]')) {
-        return rl;
-      }
-    }
+    // 1. Explicit quote tweet card testid
+    const explicitCard = tweetEl.querySelector('[data-testid="quoteTweetCard"]');
+    if (explicitCard) return explicitCard;
 
-    // 2. Find via second User-Name
+    // 2. Look for role="link" container that contains a second User-Name (quoted tweet author)
     const userNames = tweetEl.querySelectorAll('[data-testid="User-Name"]');
     if (userNames.length > 1) {
-      let cur = userNames[1];
+      const secondAuthor = userNames[1];
+      const roleLinks = tweetEl.querySelectorAll('div[role="link"], div[tabindex="0"][role="link"]');
+      for (const rl of roleLinks) {
+        if (rl.contains(secondAuthor)) {
+          return rl;
+        }
+      }
+
+      // Find bordered wrapper around second User-Name
+      let cur = secondAuthor;
       while (cur && cur !== tweetEl) {
         const style = window.getComputedStyle(cur);
         const br = parseFloat(style.borderRadius) || 0;
@@ -403,7 +412,7 @@
         }
         cur = cur.parentElement;
       }
-      cur = userNames[1];
+      cur = secondAuthor;
       while (cur && cur.parentElement && cur.parentElement !== tweetEl) {
         if (cur.parentElement.contains(userNames[0])) {
           return cur;
@@ -631,11 +640,33 @@
     let dateStr = '';
 
     try {
-      const statusLink = tweetEl.querySelector('a[href*="/status/"]');
-      if (statusLink) {
-        const m = statusLink.getAttribute('href').match(/\/status\/(\d+)/);
-        if (m && m[1]) tweetId = m[1];
+      // 1. Time link is the tweet's own primary timestamp permalink
+      const timeEl = tweetEl.querySelector('time');
+      if (timeEl) {
+        const timeLink = timeEl.closest('a[href*="/status/"]');
+        if (timeLink) {
+          const m = timeLink.getAttribute('href').match(/\/status\/(\d+)/);
+          if (m && m[1]) tweetId = m[1];
+        }
       }
+
+      // 2. Fallback: check status links outside quote card and tweet text
+      if (!tweetId) {
+        const quoteCard = findQuoteCard(tweetEl);
+        const tweetText = tweetEl.querySelector('[data-testid="tweetText"]');
+        const statusLinks = Array.from(tweetEl.querySelectorAll('a[href*="/status/"]'));
+        for (const sl of statusLinks) {
+          if (quoteCard && quoteCard.contains(sl)) continue;
+          if (tweetText && tweetText.contains(sl)) continue;
+          const m = sl.getAttribute('href').match(/\/status\/(\d+)/);
+          if (m && m[1]) {
+            tweetId = m[1];
+            break;
+          }
+        }
+      }
+
+      // 3. Fallback to page status match if this is focal tweet or still missing
       if (!tweetId) {
         const pageStatusMatch = window.location.pathname.match(/\/status\/(\d+)/);
         if (pageStatusMatch && pageStatusMatch[1]) tweetId = pageStatusMatch[1];
@@ -692,7 +723,7 @@
 
   // Count how many tweets are in the conversation thread on the page
   function countThreadTweets() {
-    const composer = document.querySelector('[data-testid="inline-reply-composer"]');
+    const composer = document.querySelector('[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"], [placeholder*="reply"], [placeholder*="ответ"]');
     const allTweets = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
     if (allTweets.length === 0) return 1;
 
@@ -1724,7 +1755,7 @@
                 if (clean) cues.push(clean);
               }
             }
-            if (cues.length > 0) return cues.join('\n');
+            if (cues.length > 0) return cues.join('\r\n');
           }
         }
       }
@@ -1756,7 +1787,7 @@
   function drawSubtitlesOnCanvas(ctx, rawText, vx, vy, vw, vh) {
     if (!rawText) return;
 
-    const rawLines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const rawLines = rawText.split(/\r?\r\n/).map(l => l.trim()).filter(Boolean);
     if (rawLines.length === 0) return;
 
     ctx.save();
@@ -1970,6 +2001,9 @@
 
     const hideEl = (el) => {
       if (!el || el.__tw_hidden) return;
+      if (tweetEl && (el === tweetEl || el.contains(tweetEl))) return;
+      if (el.matches && el.matches('article[data-testid="tweet"]')) return;
+      if (el.querySelector && el.querySelector('article[data-testid="tweet"]')) return;
       el.__tw_hidden = true;
       const prevDisplay = el.style.display;
       el.style.setProperty('display', 'none', 'important');
@@ -2018,30 +2052,34 @@
       hideEl(container);
     }
 
-    // 4. Hide "Relevant" sorting dropdown and reply composers
-    const allSpans = document.querySelectorAll('span, button, a, div[role="button"]');
-    for (const item of allSpans) {
-      if (tweetEl && tweetEl.contains(item)) continue;
-      if (isActionBarElement(item)) continue;
-      const t = (item.textContent || '').trim().toLowerCase();
-      if (t === 'relevant' || t.startsWith('relevant') || t === 'view quotes' || t === 'сначала актуальные' || t === 'показать цитаты') {
-        const block = item.closest('div[style*="flex"], div[class*="r-"]') || item;
-        hideEl(block);
+    // 4. Hide "Relevant" sorting dropdown and standalone reply composer
+    const composerButtons = document.querySelectorAll(
+      '[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"]'
+    );
+    for (const cb of composerButtons) {
+      if (tweetEl && tweetEl.contains(cb)) continue;
+      const cell = cb.closest('[data-testid="cellInnerDiv"]');
+      if (cell && !cell.querySelector('article[data-testid="tweet"]') && (!tweetEl || !cell.contains(tweetEl))) {
+        hideEl(cell);
       }
     }
 
-    const composers = document.querySelectorAll(
-      '[data-testid="inline-reply-composer"], [data-testid="tweetTextarea_0"], [aria-label*="Post text"], [aria-label*="Текст поста"]'
-    );
-    for (const c of composers) {
-      const block = c.closest('div[style*="flex"], div[class*="r-"]') || c;
-      hideEl(block);
-    }
-    const allTextboxes = document.querySelectorAll('div[role="textbox"]');
-    for (const tb of allTextboxes) {
-      if (!tweetEl.contains(tb)) {
-        const composerWrapper = tb.closest('[data-testid*="composer"], div[class*="r-"]') || tb;
-        hideEl(composerWrapper);
+    const sortElements = document.querySelectorAll('button, div[role="button"], span');
+    for (const item of sortElements) {
+      if (item.closest('[data-testid="tweetText"]')) continue;
+      if (item.closest('[data-testid="User-Name"]')) continue;
+      if (isActionBarElement(item)) continue;
+      const t = (item.textContent || '').trim().toLowerCase();
+      if (
+        t === 'relevant' || t === 'relevantv' || t === 'relevant v' ||
+        t.startsWith('relevant') || t === 'most relevant' || t.startsWith('most relevant') ||
+        t === 'сначала актуальные' || t.startsWith('сначала актуальные')
+      ) {
+        hideEl(item);
+        const cell = item.closest('[data-testid="cellInnerDiv"]');
+        if (cell && !cell.querySelector('article[data-testid="tweet"]') && (!tweetEl || !cell.contains(tweetEl))) {
+          hideEl(cell);
+        }
       }
     }
 
@@ -2168,6 +2206,8 @@
       const unfreezeTweetVideos = await prepareAndFreezeVideos(tweetEl);
       localRestores.push(unfreezeTweetVideos);
 
+      const quoteCard = findQuoteCard(tweetEl);
+
       // If quote crop is active and post is a quote/has a quote card, apply crop
       if (isQuote && config.quoteCrop && config.quoteCrop !== '100') {
         const restoreCrop = applyQuoteCrop(tweetEl, config.quoteCrop);
@@ -2266,7 +2306,6 @@
         }
       }
 
-      const quoteCard = findQuoteCard(tweetEl);
       const rect = tweetEl.getBoundingClientRect();
       const tweetDocTop = window.scrollY + rect.top;
 
@@ -2297,7 +2336,9 @@
             const bW = Math.max(1, cardBorderWidth);
             const leftEdge = Math.max(0, (cardRect.left - rect.left) + bW);
             const rightEdge = Math.min(rect.width, (cardRect.right - rect.left) - bW);
-            const bottomEdge = Math.min(rect.height, (cardRect.bottom - rect.top) - bW);
+            const bottomEdge = isQuoteCard
+              ? Math.max(0, vRect.bottom - rect.top)
+              : Math.max(0, (cardRect.bottom - rect.top) - bW);
             const topEdge = isQuoteCard
               ? Math.max(0, vRect.top - rect.top)
               : Math.max(0, (cardRect.top - rect.top) + bW);
@@ -2340,16 +2381,13 @@
         const actionBars = Array.from(tweetEl.querySelectorAll('div[role="group"]')).filter(
           ab => isGenuineActionBar(ab, quoteCard) && !ab.__tw_local_hidden && !ab.__tw_hidden && ab.offsetParent !== null
         );
-        if (actionBars.length > 0) {
-          const lastAb = actionBars[actionBars.length - 1];
-          const abRect = lastAb.getBoundingClientRect();
-          bottomY = Math.max(rect.bottom, abRect.bottom + 14);
+        const genuineAb = actionBars.length > 0 ? actionBars[actionBars.length - 1] : findTweetActionBar(tweetEl);
+        if (genuineAb && !genuineAb.__tw_local_hidden && !genuineAb.__tw_hidden && genuineAb.offsetParent !== null) {
+          const abRect = genuineAb.getBoundingClientRect();
+          // Tightly bound to the action bar bottom (+2px) to prevent bleeding into "Relevant" dropdown
+          bottomY = abRect.bottom + 2;
         } else {
-          const genuineAb = findTweetActionBar(tweetEl);
-          if (genuineAb && !genuineAb.__tw_local_hidden && !genuineAb.__tw_hidden && genuineAb.offsetParent !== null) {
-            const abRect = genuineAb.getBoundingClientRect();
-            bottomY = Math.max(rect.bottom, abRect.bottom + 14);
-          }
+          bottomY = rect.bottom;
         }
       } else {
         // When hiding action bar, find the lowest visible content element in the tweet
@@ -2359,7 +2397,7 @@
         // Check quote card (quoted tweet / reply card)
         if (quoteCard && !quoteCard.__tw_local_hidden && !quoteCard.__tw_hidden && quoteCard.offsetParent !== null) {
           const qr = quoteCard.getBoundingClientRect();
-          contentBottom = Math.max(contentBottom, qr.bottom + 8);
+          contentBottom = Math.max(contentBottom, qr.bottom + 3);
         }
 
         // Check polls or non-action groups so poll options and vote count are not truncated
@@ -2369,7 +2407,7 @@
           if (quoteCard && quoteCard.contains(grp)) continue;
           if (isGenuineActionBar(grp, quoteCard)) continue;
           const grpr = grp.getBoundingClientRect();
-          contentBottom = Math.max(contentBottom, grpr.bottom + 8);
+          contentBottom = Math.max(contentBottom, grpr.bottom + 3);
         }
 
         // Check all time elements (quote time and main tweet date/views row)
@@ -2378,29 +2416,44 @@
         for (const tm of times) {
           if (tm.__tw_local_hidden || tm.__tw_hidden || tm.offsetParent === null) continue;
           if (quoteCard && quoteCard.contains(tm)) continue;
-          const timeRow = tm.closest('div[style*="flex"], div[class*="r-"]') || tm;
-          const tr = timeRow.getBoundingClientRect();
-          contentBottom = Math.max(contentBottom, tr.bottom + 8);
+          const tr = tm.getBoundingClientRect();
+          contentBottom = Math.max(contentBottom, tr.bottom + 3);
         }
 
-        // Check media (videos, images, photo cards, card wrappers)
-        // Skip elements inside quoteCard so overflowing unclipped media doesn't inflate height!
-        const medias = tweetEl.querySelectorAll('video, img, [data-testid="videoComponent"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"]');
+        // For focal posts where the date & views row uses plain text spans instead of <time>:
+        const dateCandidates = Array.from(tweetEl.querySelectorAll('span, div, a')).filter(el => {
+          if (quoteCard && quoteCard.contains(el)) return false;
+          if (el.closest('[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"]')) return false;
+          const txt = (el.textContent || '').trim();
+          return (/\d{1,2}:\d{2}\s*(?:[ap]\.?m\.?)?/i.test(txt) && /views|просмотр|\d{4}/i.test(txt));
+        });
+        for (const dc of dateCandidates) {
+          const dcr = dc.getBoundingClientRect();
+          if (dcr.height > 5) {
+            contentBottom = Math.max(contentBottom, dcr.bottom + 3);
+          }
+        }
+
+        // Check media (videos, images, photo cards, card wrappers) - strictly excluding reply composers
+        const medias = tweetEl.querySelectorAll('video, img, [data-testid="videoComponent"], [data-testid="videoPlayer"], [data-testid="tweetPhoto"], [data-testid="card.wrapper"]');
         for (const m of medias) {
           if (m.__tw_local_hidden || m.__tw_hidden || m.offsetParent === null) continue;
           if (quoteCard && quoteCard.contains(m)) continue;
+          if (m.closest('[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"]')) continue;
           const mr = m.getBoundingClientRect();
-          contentBottom = Math.max(contentBottom, mr.bottom + 8);
+          if (mr.height > 10 && mr.width > 10) {
+            contentBottom = Math.max(contentBottom, mr.bottom + 3);
+          }
         }
 
-        // Check text
-        // Skip elements inside quoteCard
+        // Check text - skip elements inside quoteCard or reply composer
         const texts = tweetEl.querySelectorAll('[data-testid="tweetText"]');
         for (const tx of texts) {
           if (tx.__tw_local_hidden || tx.__tw_hidden || tx.offsetParent === null) continue;
           if (quoteCard && quoteCard.contains(tx)) continue;
+          if (tx.closest('[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"]')) continue;
           const txr = tx.getBoundingClientRect();
-          contentBottom = Math.max(contentBottom, txr.bottom + 8);
+          contentBottom = Math.max(contentBottom, txr.bottom + 3);
         }
 
         if (contentBottom > rect.top + 30) {
@@ -2408,6 +2461,18 @@
         }
       }
 
+      // Safety guarantee: bottomY must never cut off visible media or quote cards regardless of hideActionBar
+      // Strictly ignore user avatar or icons inside reply composers
+      const allVisibleMedias = tweetEl.querySelectorAll('video, [data-testid="videoComponent"], [data-testid="videoPlayer"], [data-testid="tweetPhoto"]');
+      for (const m of allVisibleMedias) {
+        if (!m.__tw_local_hidden && !m.__tw_hidden && m.offsetParent !== null) {
+          if (m.closest('[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"]')) continue;
+          const mr = m.getBoundingClientRect();
+          if (mr.height > 10 && mr.bottom > bottomY) {
+            bottomY = mr.bottom + 3;
+          }
+        }
+      }
       let totalHeight = Math.round(bottomY - rect.top);
       if (totalHeight <= 0) {
         totalHeight = Math.max(100, Math.round(tweetEl.offsetHeight || 250));
@@ -3030,56 +3095,94 @@
       await Promise.allSettled(activeVideoSources.map(async (vs) => {
         const meta = getTweetMeta(vs.tweetEl);
         const tweetId = meta?.tweetId;
-        if (!tweetId) return;
 
-        try {
-          const mediaRes = await new Promise(r => {
-            chrome.runtime.sendMessage({ action: 'getTweetMediaVideo', tweetId }, r);
-          });
-          if (mediaRes?.success && mediaRes.videoUrl) {
+        // Try direct source URL on the video element first (especially for Twitter GIFs which point directly to https://video.twimg.com/tweet_video/....mp4)
+        let directUrl = (vs.videoEl.currentSrc || vs.videoEl.src || '').trim();
+        if (!directUrl || directUrl.startsWith('blob:')) {
+          const srcTag = vs.videoEl.querySelector('source');
+          if (srcTag && srcTag.src && !srcTag.src.startsWith('blob:')) {
+            directUrl = srcTag.src.trim();
+          }
+        }
+
+        let cleanDataUrl = null;
+        let isDirectGif = vs.isGifLike;
+
+        // If directUrl is http/https, extension background can fetch it directly to convert to a safe dataUrl
+        if (directUrl && (directUrl.startsWith('http://') || directUrl.startsWith('https://'))) {
+          try {
             const blobRes = await new Promise(r => {
-              chrome.runtime.sendMessage({ action: 'fetchVideoBlob', url: mediaRes.videoUrl }, r);
+              chrome.runtime.sendMessage({ action: 'fetchVideoBlob', url: directUrl }, r);
             });
             if (blobRes?.success && blobRes.dataUrl) {
-              const cv = document.createElement('video');
-              cv.crossOrigin = 'anonymous';
-              cv.muted = true;
-              cv.loop = vs.isGifLike || !!mediaRes.isGif || (!vs.isPrimary);
-              cv.playsInline = true;
-              cv.preload = 'auto';
-              cv.src = blobRes.dataUrl;
-
-              // Firefox Gecko requirement: unattached video element does not advance video decoder texture
-              cv.style.position = 'fixed';
-              cv.style.top = '-9999px';
-              cv.style.left = '-9999px';
-              cv.style.width = '16px';
-              cv.style.height = '16px';
-              cv.style.opacity = '0.001';
-              cv.style.pointerEvents = 'none';
-              document.body.appendChild(cv);
-
-              await new Promise(r => {
-                if (cv.readyState >= 2) return r();
-                cv.onloadeddata = r;
-                cv.oncanplay = r;
-                setTimeout(r, 1200);
-              });
-              try { cv.currentTime = vs.videoEl.currentTime || 0; } catch (e) {}
-              try { await cv.play(); } catch (e) {}
-              if (vs.isPrimary && !vs.isGifLike) {
-                const allowUnmute = shouldForceAudio ? true : !vs.origMuted;
-                if (allowUnmute) {
-                  try { cv.muted = false; } catch (e) {}
-                }
-              }
-              vs.cleanVideoEl = cv;
-              vs.activeVideo = cv;
-              cleanVideoEls.push(cv);
+              cleanDataUrl = blobRes.dataUrl;
             }
+          } catch (e) {}
+        }
+
+        // If not resolved from directUrl, query background to resolve via tweet API (syndication / fx / fixupx)
+        if (!cleanDataUrl && tweetId) {
+          try {
+            const mediaRes = await new Promise(r => {
+              chrome.runtime.sendMessage({ action: 'getTweetMediaVideo', tweetId }, r);
+            });
+            if (mediaRes?.success && mediaRes.videoUrl) {
+              if (mediaRes.isGif) isDirectGif = true;
+              const blobRes = await new Promise(r => {
+                chrome.runtime.sendMessage({ action: 'fetchVideoBlob', url: mediaRes.videoUrl }, r);
+              });
+              if (blobRes?.success && blobRes.dataUrl) {
+                cleanDataUrl = blobRes.dataUrl;
+              }
+            }
+          } catch (cleanErr) {
+            console.warn('[Screenshoter] Clean video setup note for tweet:', tweetId, cleanErr);
           }
-        } catch (cleanErr) {
-          console.warn('[Screenshoter] Clean video setup note for tweet:', tweetId, cleanErr);
+        }
+
+        // Create clean video element from dataUrl or with crossOrigin="anonymous" to prevent any canvas taint
+        const videoSrcToUse = cleanDataUrl || (directUrl && (directUrl.startsWith('http://') || directUrl.startsWith('https://')) ? directUrl : null);
+
+        if (videoSrcToUse) {
+          try {
+            const cv = document.createElement('video');
+            cv.crossOrigin = 'anonymous';
+            cv.muted = true;
+            cv.loop = vs.isGifLike || isDirectGif || (!vs.isPrimary);
+            cv.playsInline = true;
+            cv.preload = 'auto';
+            cv.src = videoSrcToUse;
+
+            // Firefox Gecko requirement: unattached video element does not advance video decoder texture
+            cv.style.position = 'fixed';
+            cv.style.top = '-9999px';
+            cv.style.left = '-9999px';
+            cv.style.width = '16px';
+            cv.style.height = '16px';
+            cv.style.opacity = '0.001';
+            cv.style.pointerEvents = 'none';
+            document.body.appendChild(cv);
+
+            await new Promise(r => {
+              if (cv.readyState >= 2) return r();
+              cv.onloadeddata = r;
+              cv.oncanplay = r;
+              setTimeout(r, 1200);
+            });
+            try { cv.currentTime = vs.videoEl.currentTime || 0; } catch (e) {}
+            try { await cv.play(); } catch (e) {}
+            if (vs.isPrimary && !vs.isGifLike && !isDirectGif) {
+              const allowUnmute = shouldForceAudio ? true : !vs.origMuted;
+              if (allowUnmute) {
+                try { cv.muted = false; } catch (e) {}
+              }
+            }
+            vs.cleanVideoEl = cv;
+            vs.activeVideo = cv;
+            cleanVideoEls.push(cv);
+          } catch (cvErr) {
+            console.warn('[Screenshoter] Error initializing clean video element:', cvErr);
+          }
         }
       }));
 
@@ -3169,6 +3272,12 @@
 
       // Pre-draw initial frame with all active video sources
       recCtx.drawImage(scaledBaseCanvas, 0, 0, recW, recH);
+      try {
+        recCtx.getImageData(0, 0, 1, 1);
+      } catch (tErr) {
+        lastTaintError = tErr?.message || String(tErr);
+        console.error('[Screenshoter] Canvas was tainted on initial draw:', tErr);
+      }
       for (const vs of activeVideoSources) {
         const drawVx = Math.round(vs.vx * scaleRatioX);
         const drawVy = Math.round(vs.vy * scaleRatioY);
@@ -4097,7 +4206,9 @@
     }
 
     const text = tweetEl.innerText || tweetEl.textContent || '';
-    if (text.includes('·') && (text.includes('Views') || text.includes('Просмотр') || /\d+:\d+\s+[AP]M/i.test(text))) {
+    const hasViews = /views|просмотр/i.test(text);
+    const hasTime = /\d{1,2}:\d{2}\s*(?:[ap]\.?m\.?)?/i.test(text);
+    if (hasViews || (hasTime && /[\u00b7\u2022\u2023\u25E6\u2219·•]/.test(text))) {
       return true;
     }
 
@@ -4111,7 +4222,7 @@
   function isEligibleForScreenshotButton(tweetEl) {
     if (!window.location.pathname.includes('/status/')) return false;
 
-    const composer = document.querySelector('[data-testid="inline-reply-composer"]');
+    const composer = document.querySelector('[data-testid="tweetButtonInline"], [data-testid="inline-reply-composer"], [placeholder*="reply"], [placeholder*="ответ"]');
     if (composer) {
       const pos = tweetEl.compareDocumentPosition(composer);
       if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
